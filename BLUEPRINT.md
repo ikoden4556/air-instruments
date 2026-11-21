@@ -1,4 +1,4 @@
-# air-strings — Blueprint
+# air-instruments — Blueprint
 
 An air string instrument played with bare hands in front of a phone camera. Pinch with both hands to stretch a glowing string between them, release to freeze it in the air, swipe an index fingertip across it to pluck. Fully offline, no recording, no uploads.
 
@@ -22,7 +22,7 @@ Status: **design agreed, nothing built.** Building starts only after final confi
 | Hints | On-screen | "No hands detected", "Too dark", "Bluetooth audio: expect lag" |
 | Privacy | — | No internet permission (Android); the web app is an offline PWA after the first visit |
 | Distribution | — | Personal sideload (Android) and GitHub Pages (web). No app stores. |
-| Repo | — | Public GitHub repo `air-strings`, hosted on GitHub Pages |
+| Repo | — | Public GitHub repo `air-instruments`, hosted on GitHub Pages |
 | Min Android | — | Android 10 (API 29) |
 
 ### Latency targets (motion → sound)
@@ -79,7 +79,7 @@ The core is pure logic with no platform code:
 ## 3. Project layout
 
 ```text
-air-strings/
+air-instruments/
 ├── GLOSSARY.md                 # Domain terms: Anchor, String, Pluck, Voice, …
 ├── docs/adr/                   # One short record per stack decision
 ├── core/                       # Rust crate: pure logic + synth, cargo test
