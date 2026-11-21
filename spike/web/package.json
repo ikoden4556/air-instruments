@@ -1,0 +1,15 @@
+{
+  "name": "latency-spike-web",
+  "private": true,
+  "description": "PROTOTYPE: throwaway phase-2 latency spike, delete after measuring",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node -e \"require('fs').cpSync('node_modules/@mediapipe/tasks-vision/wasm','public/wasm',{recursive:true})\"",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@mediapipe/tasks-vision": "^1.2.3",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "vite": "^8.3.8"
+  }
+}
