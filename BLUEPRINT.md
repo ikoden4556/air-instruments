@@ -2,7 +2,7 @@
 
 An air string instrument played with bare hands in front of a phone camera. Pinch with both hands to stretch a glowing string between them, release to freeze it in the air, swipe an index fingertip across it to pluck. Fully offline, no recording, no uploads.
 
-Status: **design agreed, nothing built.** Building starts only after final confirmation.
+Status: **phase 0 (setup) and phase 1 (domain model) done.** Vocabulary: `GLOSSARY.md`. Decisions: `docs/adr/`.
 
 ---
 
@@ -24,6 +24,19 @@ Status: **design agreed, nothing built.** Building starts only after final confi
 | Distribution | — | Personal sideload (Android) and GitHub Pages (web). No app stores. |
 | Repo | — | Public GitHub repo `air-instruments`, hosted on GitHub Pages |
 | Min Android | — | Android 10 (API 29) |
+
+### Playing rules (terms as in `GLOSSARY.md`)
+
+| # | Situation | Rule |
+|---|---|---|
+| S1 | One Hand Pinches, the other is open | Nothing happens; the pinching Hand can't Pluck either |
+| S2 | One Hand of a Stretch stops Pinching | The Stretch Freezes immediately (first release wins) |
+| S3 | Stretch shorter than 8% of screen width | Discarded instead of Freezing |
+| S4 | A Hand of a Stretch drops out of tracking | The Stretch survives gaps up to 150 ms, then is Discarded |
+| S5 | Plucker swipes down then back up | Two Plucks; re-crossing the same String within 60 ms is ignored as jitter |
+| S6 | Plucker passes through two crossing Strings | Both Pluck |
+| S7 | A Stretch sweeps across an existing String | No Pluck |
+| S8 | Both Pluckers cross one String in the same frame | One Pluck, at the faster Plucker's Velocity |
 
 ### Latency targets (motion → sound)
 

@@ -1,0 +1,3 @@
+# Motion-to-sound latency targets: under 60 ms native, under 100 ms web
+
+Real phones set a floor on Motion-to-sound latency: camera frame capture (~16–33 ms), hand tracking (~10–35 ms) and audio output (~10–40 ms). The earlier "under 35 ms" goal is not reachable. Targets are under 60 ms for native Android and under 100 ms for the web app, with wired audio or the phone speaker; Bluetooth audio adds 150 ms or more and is warned about, not supported. Pluck prediction (extrapolating the filtered Plucker path) is allowed to hide part of the camera delay. Every change on the frame → Pluck → sound path is judged against these numbers, measured on the Redmi K50 (the low end), Oppo Find X9 Pro and iPhone 11.
