@@ -7,6 +7,7 @@ const ctx = canvas.getContext('2d')!;
 const hud = document.getElementById('hud')!;
 const flash = document.getElementById('flash')!;
 
+const DELEGATE = location.search.includes('cpu') ? 'CPU' : 'GPU'; // ?cpu compares against the GPU path
 const STRING_X = 0.5; // one test string: a vertical line down the middle of the (mirrored) image
 let audio: AudioContext;
 let landmarker: HandLandmarker;
@@ -37,7 +38,7 @@ document.getElementById('start')!.onclick = async (e) => {
   cam = `${s.width}x${s.height} @ ${s.frameRate ?? '?'} fps requested-60`;
   const files = await FilesetResolver.forVisionTasks('/wasm');
   landmarker = await HandLandmarker.createFromOptions(files, {
-    baseOptions: { modelAssetPath: '/hand_landmarker.task', delegate: 'GPU' },
+    baseOptions: { modelAssetPath: '/hand_landmarker.task', delegate: DELEGATE },
     runningMode: 'VIDEO',
     numHands: 2,
   });
@@ -119,7 +120,7 @@ function render() {
 `PROTOTYPE latency spike  ${navigator.userAgent.match(/\(([^)]+)\)/)?.[1] ?? ''}
 camera        ${cam}
 frames/s      ${fps}   dropped ${dropped}
-inference     ${stat(infer)}
+inference     ${stat(infer)}  [${DELEGATE}]
 frame->beep   ${stat(pipe)}  ${usesCaptureTime ? '(from capture)' : '(from callback: UNDER-reports)'}
 audio         base ${baseMs.toFixed(1)}  output ${outMs ? outMs.toFixed(1) : 'n/a'} ms
 EST TOTAL     ${total}  (last pluck, excludes sensor exposure)
