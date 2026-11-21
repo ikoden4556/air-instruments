@@ -1,0 +1,13 @@
+ponytail/
+target/
+node_modules/
+dist/
+pkg/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.codegraph/
+*.keystore
+*.jks
