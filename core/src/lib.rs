@@ -3,3 +3,4 @@
 pub mod filter;
 pub mod frame;
 pub mod pinch;
+pub mod strings;
