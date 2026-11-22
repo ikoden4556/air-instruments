@@ -42,9 +42,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 
 ## Web shell (#23)
 - [x] On the Oppo: `adb reverse tcp:5173 tcp:5173`, `npm run dev` in `web/`, open https://localhost:5173, tap to start; the camera and hand tracking start (http://localhost also works over adb reverse). (2026-11-22: proven on the public URL and installed app instead)
-- [ ] Strings, Stretch, Anchors and Pluckers in the debug drawing sit on your real fingers (mirroring, cover crop).
+- [x] Strings, Stretch, Anchors and Pluckers in the debug drawing sit on your real fingers (mirroring, cover crop). (Oppo web 2026-11-22)
 - [ ] Frames per second: hand tracking keeps up (spike: ~16–20 processed frames/s on Chrome).
-- [ ] The swapped MediaPipe labels really give your own left and right (`frame.ts`).
+- [x] The swapped MediaPipe labels really give your own left and right (`frame.ts`). (Oppo web 2026-11-22)
 
 ## Web audio (#24)
 - [ ] A Pluck sounds on the Oppo (Chrome) and the iPhone (Safari) right after "Tap to start".
@@ -52,14 +52,14 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Felt latency of the postMessage path; switch to a SharedArrayBuffer ring buffer only if it's too slow (ADR 0004 web target: under 150 ms felt).
 
 ## Web drawing (#25)
-- [ ] Strings glow and are easy to see over the camera image; Fret ticks are clear enough to aim at.
-- [ ] A Plucked String's vibration and sparks look right and land where the finger crossed.
-- [ ] The faint hand skeleton helps rather than distracts.
+- [x] Strings glow and are easy to see over the camera image; Fret ticks are clear enough to aim at. (Oppo web 2026-11-22)
+- [x] A Plucked String's vibration and sparks look right and land where the finger crossed. (Oppo web 2026-11-22)
+- [x] The faint hand skeleton helps rather than distracts. (Oppo web 2026-11-22)
 - [ ] Drawing doesn't slow hand tracking (frames/s with and without WebGL; the 2D fallback is used only without WebGL2).
 
 ## Web controls (#26)
-- [ ] Undo, Clear and Key are easy to hit with the phone on a stand, and don't get in the way of playing (top edge).
-- [ ] Changing the Key changes the notes of existing Strings straight away.
+- [x] Undo, Clear and Key are easy to hit with the phone on a stand, and don't get in the way of playing (top edge). (Oppo web 2026-11-22)
+- [x] Changing the Key changes the notes of existing Strings straight away. (Oppo web 2026-11-22)
 
 ## Deploy and offline (#10)
 - [x] The public URL (https://ikoden4556.github.io/air-instruments/) plays on the Oppo (2026-11-22, Chrome): tracking, Strings, sparks, sound, no extra notes heard. **Clearly slower than the native app** (not measured: the web app has no latency readout yet). Page stayed portrait because the phone's auto-rotate was off; the Player says that's a phone setting, not an app problem.
