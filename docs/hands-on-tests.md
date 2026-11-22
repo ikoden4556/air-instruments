@@ -17,12 +17,12 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [x] A Hand briefly leaving the camera (under 150 ms) keeps the Stretch. Oppo 2026-11-22: a Hand moved out on purpose (well over 150 ms) Discards the Stretch, and pinching again on return starts a new one, as S4 says. A gap under 150 ms can't be made on purpose; it covers tracking dropouts, which the Player hasn't noticed.
 
 ## Crossing (#4)
-- [ ] One swipe across a String gives exactly one Pluck; a Strum Plucks each String in order.
-- [ ] A finger hovering on a String doesn't re-Pluck it (60 ms jitter guard).
+- [x] One swipe across a String gives exactly one Pluck; a Strum Plucks each String in order. (Oppo 2026-11-22)
+- [ ] A finger hovering on a String doesn't re-Pluck it (60 ms jitter guard). Oppo 2026-11-22: **FAILS — wiggling a finger on a String keeps Plucking it.**
 
 ## Prediction (#5)
-- [ ] Plucks feel on time with the 60 ms lookahead; no Plucks for near misses.
-- [ ] The 1 screen width/s speed cutoff: slow approaches still Pluck on the real crossing.
+- [ ] Plucks feel on time with the 60 ms lookahead; no Plucks for near misses. Oppo 2026-11-22: **FAILS — a fast swipe that stops just short still Plucks** (prediction fires early; still lags on fast swipes).
+- [x] The 1 screen width/s speed cutoff: slow approaches still Pluck on the real crossing. (Oppo 2026-11-22)
 - [ ] Watch `false_plucks()` while playing; tune lookahead/cutoff if it climbs.
 
 ## Pitch (#6)
