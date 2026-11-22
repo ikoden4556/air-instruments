@@ -69,3 +69,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 ## Android audio (#33)
 - [ ] The AAudio stream opens low-latency at 48 kHz with a 1-burst buffer (readout info: shared/exclusive, burst); no crackles while playing hard Strums.
 - [ ] Audio output latency is near the spike's ~29 ms.
+
+## Android shell (#34)
+- [ ] Install: `cd android; .\gradlew.bat installDebug` with the Oppo plugged in; it asks for the camera only and starts.
+- [ ] The front camera really runs at 60 fps (`setTargetFrameRate(60, 60)`; falls back to the default rate if the phone refuses).
+- [ ] The debug drawing sits on your fingers (preview and analysis both 4:3, FILL_CENTER crop) and left/right are your own hands.
+- [ ] Pinch, Freeze and Pluck work end to end and Plucks sound.
