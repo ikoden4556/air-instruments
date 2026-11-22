@@ -94,7 +94,7 @@ impl Crossing {
 }
 
 /// Re-crossing a String this soon after it Plucked is jitter, not a Pluck.
-const JITTER_NS: u64 = 60_000_000;
+pub(crate) const JITTER_NS: u64 = 60_000_000;
 
 /// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does.
 /// A Plucker resting exactly on the String counts as on its upper side,

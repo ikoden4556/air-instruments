@@ -1,7 +1,7 @@
 //! Pluck prediction: fire a Pluck when the Plucker's path will cross a String
 //! within the lookahead, instead of waiting to see the crossing (ADR 0004).
 
-use crate::crossing::{Crossing, Pluck, crossing_point};
+use crate::crossing::{Crossing, JITTER_NS, Pluck, crossing_point};
 use crate::frame::Landmark;
 use crate::strings::Segment;
 
@@ -29,6 +29,8 @@ pub struct Prediction {
     history: [Vec<(u64, Landmark)>; 2],
     /// Strings Plucked by prediction and not yet really crossed, with when they fired.
     pending: Vec<(Segment, u64)>,
+    /// When each String last Plucked or was really crossed, for S5.
+    recent: Vec<(Segment, u64)>,
     false_plucks: u32,
 }
 
@@ -41,6 +43,7 @@ impl Prediction {
             lookahead_ns,
             history: Default::default(),
             pending: Vec::new(),
+            recent: Vec::new(),
             false_plucks: 0,
         }
     }
@@ -59,9 +62,13 @@ impl Prediction {
         strings: &[Segment],
     ) -> Vec<Pluck> {
         let mut plucks = self.crossing.update(timestamp_ns, pluckers, strings);
+        // Predicted crossings run up to a lookahead ahead of now.
+        let window = JITTER_NS + self.lookahead_ns;
+        self.recent.retain(|&(_, t)| t + window > timestamp_ns);
         // A real crossing of a String already Plucked by prediction is that Pluck.
         plucks.retain(|pl| {
             let s = strings[pl.string];
+            self.recent.push((s, pl.timestamp_ns));
             let predicted = self.pending.iter().position(|(p, _)| *p == s);
             predicted.map(|i| self.pending.remove(i)).is_none()
         });
@@ -97,9 +104,17 @@ impl Prediction {
                 let Some(u) = crossing_point(at, to, s) else {
                     continue;
                 };
-                self.pending.push((*s, timestamp_ns));
                 let crosses_ns =
                     timestamp_ns + (self.lookahead_ns as f64 * u as f64).round() as u64;
+                let jitter = self
+                    .recent
+                    .iter()
+                    .any(|&(r, t)| r == *s && crosses_ns.abs_diff(t) < JITTER_NS);
+                if jitter {
+                    continue;
+                }
+                self.pending.push((*s, timestamp_ns));
+                self.recent.push((*s, crosses_ns));
                 plucks.push(Pluck {
                     string,
                     timestamp_ns: crosses_ns,
@@ -225,6 +240,27 @@ mod tests {
             (frames[7][0].timestamp_ns as f64 / 1e6 - 100.0).abs() < 1.0,
             "{frames:?}"
         );
+    }
+
+    #[test]
+    fn s5_a_prediction_within_60_ms_of_the_strings_last_pluck_is_jitter() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // Left crosses down at 8 ms, then rests. Right comes up at 4 widths/s from 0.7:
+        // predicted from frame 2 to cross at 50 ms, only 42 ms after the left's Pluck.
+        let left = [0.48, 0.52, 0.52, 0.52, 0.52, 0.52];
+        let mut plucks = Vec::new();
+        for (i, &y) in left.iter().enumerate() {
+            let t = i as u64 * FRAME;
+            let right = 0.7 - 4.0 * t as f32 / 1e9;
+            plucks.extend(pr.update(t, [p(0.3, y), p(0.7, right)], &strings));
+        }
+        assert_eq!(plucks.len(), 1, "{plucks:?}");
+        assert!(
+            (plucks[0].timestamp_ns as f64 / 1e6 - 8.0).abs() < 1.0,
+            "{plucks:?}"
+        );
+        assert_eq!(pr.false_plucks(), 0);
     }
 
     #[test]
