@@ -69,4 +69,40 @@ mod tests {
         assert!(pinches(&mut d, 0.2, 0.2));
         assert!(!pinches(&mut d, 0.2, 0.4));
     }
+
+    #[test]
+    fn a_gap_between_the_thresholds_keeps_the_current_state() {
+        let mut d = PinchDetector::new();
+        // Not pinching: wobbling between 0.22 and 0.32 does not start a Pinch.
+        for gap in [0.25, 0.30, 0.23, 0.31] {
+            assert!(!pinches(&mut d, 0.2, gap), "started at {gap}");
+        }
+        assert!(pinches(&mut d, 0.2, 0.1));
+        // Pinching: the same wobble does not end it.
+        for gap in [0.25, 0.30, 0.23, 0.31] {
+            assert!(pinches(&mut d, 0.2, gap), "released at {gap}");
+        }
+    }
+
+    #[test]
+    fn near_and_far_hands_pinch_alike() {
+        // Same hand shapes, one close to the camera (size 0.4), one far away (size 0.08).
+        for gap in [0.5, 0.2, 0.27, 0.4] {
+            let (mut near, mut far) = (PinchDetector::new(), PinchDetector::new());
+            assert_eq!(pinches(&mut near, 0.4, gap), pinches(&mut far, 0.08, gap), "gap {gap}");
+        }
+        // A tip distance of 0.03 screen units is a Pinch for the near hand only.
+        let (mut near, mut far) = (PinchDetector::new(), PinchDetector::new());
+        assert!(pinches(&mut near, 0.4, 0.03 / 0.4));
+        assert!(!pinches(&mut far, 0.08, 0.03 / 0.08));
+    }
+
+    #[test]
+    fn the_anchor_is_midway_between_thumb_tip_and_index_tip() {
+        let mut h = hand(0.2, 0.1);
+        h.landmarks[4] = Landmark { x: 0.30, y: 0.40 }; // thumb tip
+        h.landmarks[8] = Landmark { x: 0.32, y: 0.42 }; // index tip
+        let anchor = PinchDetector::new().update(&h).expect("pinching");
+        assert!((anchor.x - 0.31).abs() < 1e-6 && (anchor.y - 0.41).abs() < 1e-6, "{anchor:?}");
+    }
 }
