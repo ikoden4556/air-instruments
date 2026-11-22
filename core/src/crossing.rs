@@ -46,9 +46,14 @@ impl Crossing {
             let seconds = (t1 - t0) as f32 / 1e9;
             let velocity = (to.x - from.x).hypot((to.y - from.y) * self.aspect) / seconds;
             for (string, s) in strings.iter().enumerate() {
-                if let Some(u) = crossing_point(from, to, s) {
-                    let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
-                    plucks.push(Pluck { string, timestamp_ns, velocity });
+                let Some(u) = crossing_point(from, to, s) else { continue };
+                let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
+                let pluck = Pluck { string, timestamp_ns, velocity };
+                // Both Pluckers crossed it this frame: one Pluck, the faster one's.
+                match plucks.iter_mut().find(|pl: &&mut Pluck| pl.string == string) {
+                    Some(other) if other.velocity < velocity => *other = pluck,
+                    Some(_) => {}
+                    None => plucks.push(pluck),
                 }
             }
         }
@@ -173,6 +178,21 @@ mod tests {
             s.update(t, at(0.1, y), at(0.9, y));
             assert!(s.stretch().is_some());
             assert!(c.update(t, [None, None], s.strings()).is_empty());
+        }
+    }
+
+    #[test]
+    fn s8_both_pluckers_crossing_one_string_in_a_frame_pluck_once_at_the_faster_velocity() {
+        let strings = [across(0.5)];
+        for slow_first in [true, false] {
+            let mut c = Crossing::new(1.0);
+            // Left moves 0.2 in 100 ms (2 widths/s), right moves 0.6 (6 widths/s).
+            let (slow, fast) = ([p(0.3, 0.4), p(0.3, 0.6)], [p(0.7, 0.2), p(0.7, 0.8)]);
+            let pair = |i: usize| if slow_first { [slow[i], fast[i]] } else { [fast[i], slow[i]] };
+            c.update(0, pair(0), &strings);
+            let plucks = c.update(100 * MS, pair(1), &strings);
+            assert_eq!(plucks.len(), 1, "{plucks:?}");
+            assert!((plucks[0].velocity - 6.0).abs() < 1e-4, "{plucks:?}");
         }
     }
 }
