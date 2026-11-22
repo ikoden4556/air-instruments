@@ -12,9 +12,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [x] A half-open Pinch doesn't flicker on and off. (2026-11-22: holds steady)
 
 ## Strings (#3)
-- [ ] Left and right Hands are mapped the right way round (the shell's job, untested in core).
-- [ ] The 8%-of-screen-width minimum feels right: short Stretches are Discarded, deliberate ones Freeze.
-- [ ] A Hand briefly leaving the camera (under 150 ms) keeps the Stretch.
+- [x] Left and right Hands are mapped the right way round (the shell's job, untested in core). (Oppo 2026-11-22)
+- [x] The 8%-of-screen-width minimum feels right: short Stretches are Discarded, deliberate ones Freeze. (Oppo 2026-11-22)
+- [x] A Hand briefly leaving the camera (under 150 ms) keeps the Stretch. Oppo 2026-11-22: a Hand moved out on purpose (well over 150 ms) Discards the Stretch, and pinching again on return starts a new one, as S4 says. A gap under 150 ms can't be made on purpose; it covers tracking dropouts, which the Player hasn't noticed.
 
 ## Crossing (#4)
 - [ ] One swipe across a String gives exactly one Pluck; a Strum Plucks each String in order.
@@ -38,7 +38,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands.
 - [ ] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable.
 - [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident.
-- [ ] MediaPipe's left/right labels match the Player's Hands (mirrored preview).
+- [x] MediaPipe's left/right labels match the Player's Hands (mirrored preview). (Oppo 2026-11-22, Android)
 
 ## Web shell (#23)
 - [ ] On the Oppo: `adb reverse tcp:5173 tcp:5173`, `npm run dev` in `web/`, open https://localhost:5173, tap to start; the camera and hand tracking start (http://localhost also works over adb reverse).
