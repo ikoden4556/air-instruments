@@ -18,10 +18,10 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 
 ## Crossing (#4)
 - [x] One swipe across a String gives exactly one Pluck; a Strum Plucks each String in order. (Oppo 2026-11-22)
-- [ ] A finger hovering on a String doesn't re-Pluck it (60 ms jitter guard). Oppo 2026-11-22: **FAILS — wiggling a finger on a String keeps Plucking it.**
+- [x] A finger hovering on a String doesn't re-Pluck it (60 ms jitter guard). Oppo 2026-11-22: failed (wiggling kept Plucking); **fixed by S9** (4% re-arm distance), passes.
 
 ## Prediction (#5)
-- [ ] Plucks feel on time with the 60 ms lookahead; no Plucks for near misses. Oppo 2026-11-22: **FAILS — a fast swipe that stops just short still Plucks** (prediction fires early; still lags on fast swipes).
+- [x] Plucks feel on time with the 60 ms lookahead; no Plucks for near misses. Oppo 2026-11-22: near misses Plucked; **braking check added** (no prediction when braking stops it short): noticeably better, Player accepts it. A dead stop with no visible braking can still Pluck.
 - [x] The 1 screen width/s speed cutoff: slow approaches still Pluck on the real crossing. (Oppo 2026-11-22)
 - [ ] Watch `false_plucks()` while playing; tune lookahead/cutoff if it climbs.
 
@@ -37,7 +37,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 ## Engine (#8)
 - [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands. Oppo 2026-11-22: steady, but laggy on fast swipes (see Filter #1).
 - [x] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable. (Oppo 2026-11-22)
-- [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident. Oppo 2026-11-22: **FAILS sometimes — a new String sometimes Plucks by accident right after letting go.**
+- [x] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident. Oppo 2026-11-22: failed sometimes; **fixed by S9**, passes.
 - [x] MediaPipe's left/right labels match the Player's Hands (mirrored preview). (Oppo 2026-11-22, Android)
 
 ## Web shell (#23)
