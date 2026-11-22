@@ -12,6 +12,10 @@ pub struct Pluck {
     pub timestamp_ns: u64,
     /// The Plucker's speed while crossing, in screen widths per second.
     pub velocity: f32,
+    /// Where on the String it was crossed: 0 at its left Anchor, 1 at its right.
+    pub along: f32,
+    /// Fired by prediction, before the crossing was seen.
+    pub predicted: bool,
 }
 
 /// Remembers each Plucker's last position to find the Strings it crosses next.
@@ -53,7 +57,7 @@ impl Crossing {
             let seconds = (t1 - t0) as f32 / 1e9;
             let velocity = (to.x - from.x).hypot((to.y - from.y) * self.aspect) / seconds;
             for (string, s) in strings.iter().enumerate() {
-                let Some(u) = crossing_point(from, to, s) else {
+                let Some((u, along)) = crossing_point(from, to, s) else {
                     continue;
                 };
                 let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
@@ -61,6 +65,8 @@ impl Crossing {
                     string,
                     timestamp_ns,
                     velocity,
+                    along,
+                    predicted: false,
                 };
                 // Both Pluckers crossed it this frame: one Pluck, the faster one's.
                 match plucks
@@ -96,10 +102,11 @@ impl Crossing {
 /// Re-crossing a String this soon after it Plucked is jitter, not a Pluck.
 pub(crate) const JITTER_NS: u64 = 60_000_000;
 
-/// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does.
+/// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does,
+/// and how far along the String (0 at its left Anchor, 1 at its right).
 /// A Plucker resting exactly on the String counts as on its upper side,
 /// so the crossing is found in one frame only.
-pub(crate) fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Option<f32> {
+pub(crate) fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Option<(f32, f32)> {
     let (a, b) = (s.left, s.right);
     let side = |p: Landmark| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
     let (d0, d1) = (side(from), side(to));
@@ -110,7 +117,7 @@ pub(crate) fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Optio
     let (qx, qy) = (from.x + u * (to.x - from.x), from.y + u * (to.y - from.y));
     let (sx, sy) = (b.x - a.x, b.y - a.y);
     let v = ((qx - a.x) * sx + (qy - a.y) * sy) / (sx * sx + sy * sy);
-    (0.0..=1.0).contains(&v).then_some(u)
+    (0.0..=1.0).contains(&v).then_some((u, v))
 }
 
 #[cfg(test)]
