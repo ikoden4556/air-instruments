@@ -4,6 +4,7 @@ import { createAudioContext, startSynth } from './audio';
 import { Engine, type PluckEvent } from './core';
 import { drawDebug } from './draw2d';
 import { toScreenHands } from './frame';
+import { GlRenderer } from './gl-renderer';
 import { coverMapping } from './view';
 
 const BASE = import.meta.env.BASE_URL;
@@ -42,7 +43,9 @@ async function run(audio: AudioContext): Promise<void> {
     numHands: 2,
   });
   const engine = new Engine(core, video.videoHeight / video.videoWidth, 0);
-  const ctx = canvas.getContext('2d')!;
+  // WebGL2 where available; the plain 2D debug drawing otherwise.
+  const gl = GlRenderer.create(canvas);
+  const ctx = gl ? null : canvas.getContext('2d');
   status.textContent = '';
 
   const onFrame = (now: number, meta: VideoFrameCallbackMetadata) => {
@@ -56,7 +59,14 @@ async function run(audio: AudioContext): Promise<void> {
     const dpr = window.devicePixelRatio || 1;
     const [w, h] = [Math.round(canvas.clientWidth * dpr), Math.round(canvas.clientHeight * dpr)];
     if (canvas.width !== w || canvas.height !== h) [canvas.width, canvas.height] = [w, h];
-    drawDebug(ctx, engine.render(), coverMapping(video.videoWidth, video.videoHeight, w, h));
+    const map = coverMapping(video.videoWidth, video.videoHeight, w, h);
+    const scene = engine.render();
+    if (gl) {
+      if (plucks.length) gl.pluck(plucks, scene, map, now);
+      gl.draw(scene, hands, HandLandmarker.HAND_CONNECTIONS, map, now);
+    } else {
+      drawDebug(ctx!, scene, map);
+    }
     video.requestVideoFrameCallback(onFrame);
   };
   video.requestVideoFrameCallback(onFrame);

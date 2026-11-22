@@ -50,3 +50,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] A Pluck sounds on the Oppo (Chrome) and the iPhone (Safari) right after "Tap to start".
 - [ ] Safari accepts the compiled wasm module posted to the AudioWorklet (if not: send the bytes and compile in the worklet).
 - [ ] Felt latency of the postMessage path; switch to a SharedArrayBuffer ring buffer only if it's too slow (ADR 0004 web target: under 150 ms felt).
+
+## Web drawing (#25)
+- [ ] Strings glow and are easy to see over the camera image; Fret ticks are clear enough to aim at.
+- [ ] A Plucked String's vibration and sparks look right and land where the finger crossed.
+- [ ] The faint hand skeleton helps rather than distracts.
+- [ ] Drawing doesn't slow hand tracking (frames/s with and without WebGL; the 2D fallback is used only without WebGL2).
