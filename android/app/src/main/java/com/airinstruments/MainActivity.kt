@@ -92,6 +92,9 @@ class MainActivity : ComponentActivity() {
     private val ui = Handler(Looper.getMainLooper())
     private val cameraFrames = AtomicInteger()
     private val results = AtomicInteger()
+    /** The hand tracking settings in use, for the readout (#48). */
+    private var tracking = ""
+    private val captureToApp = Rolling()
     private val captureToResult = Rolling()
     private val felt = FeltLatency()
     @Volatile private var falsePlucks = 0
@@ -148,14 +151,27 @@ class MainActivity : ComponentActivity() {
         })
 
         audioInfo = Native.audioStart()
+        // Tuning (#48): `--es model <bundle in assets/>` picks another hand model,
+        // and `--ei num_hands`, `--ef min_tracking` / `min_presence` / `min_detection` override MediaPipe's.
+        val model = intent.getStringExtra("model") ?: "hand_landmarker.task"
+        fun float(name: String) = intent.getFloatExtra(name, -1f).takeIf { it >= 0f }
+        tracking = listOf(
+            model.removePrefix("hand_landmarker").removeSuffix(".task").removePrefix("_").ifEmpty { "full" },
+            "${intent.getIntExtra("num_hands", 2)} hands",
+        ).plus(listOf("min_tracking", "min_presence", "min_detection").mapNotNull { n -> float(n)?.let { "$n $it" } })
+            .joinToString(", ")
+        Log.i(TAG, "tracking: $tracking")
         landmarker = HandLandmarker.createFromOptions(
             this,
             HandLandmarker.HandLandmarkerOptions.builder()
-                .setBaseOptions(
-                    BaseOptions.builder().setModelAssetPath("hand_landmarker.task").setDelegate(Delegate.GPU).build(),
-                )
+                .setBaseOptions(BaseOptions.builder().setModelAssetPath(model).setDelegate(Delegate.GPU).build())
                 .setRunningMode(RunningMode.LIVE_STREAM)
-                .setNumHands(2)
+                .setNumHands(intent.getIntExtra("num_hands", 2))
+                .apply {
+                    float("min_tracking")?.let { setMinTrackingConfidence(it) }
+                    float("min_presence")?.let { setMinHandPresenceConfidence(it) }
+                    float("min_detection")?.let { setMinHandDetectionConfidence(it) }
+                }
                 .setResultListener(::onResult)
                 .build(),
         )
@@ -256,6 +272,8 @@ class MainActivity : ComponentActivity() {
         val info = audioInfo
         readout.text = """
             camera          ${(cameraFrames.getAndSet(0) * perSecond).toInt()} fps   results ${(results.getAndSet(0) * perSecond).toInt()}/s
+            tracking        $tracking
+            capture→app     ${captureToApp.summary()}
             capture→result  ${captureToResult.summary()}
             audio out       ${"%.0f".format(Native.audioOutputLatencyMs(System.nanoTime()))} ms   ${if (info < 0) "error $info" else "exclusive=${info and 1 == 1} lowLatency=${info shr 1 and 1 == 1} burst=${info shr 8}"}
             FELT            ${felt.all.summary()}
@@ -272,6 +290,7 @@ class MainActivity : ComponentActivity() {
         val (bootNow, monoNow) = SystemClock.elapsedRealtimeNanos() to System.nanoTime()
         val boot = boottime ?: CameraClock.isBoottime(ts, bootNow, monoNow).also { boottime = it }
         val captureMs = CameraClock.toMonotonic(ts, boot, bootNow, monoNow) / 1_000_000
+        captureToApp.add(monoNow / 1e6 - captureMs)
         val rotation = image.imageInfo.rotationDegrees
         imageSize = if (rotation % 180 == 0) Size(image.width, image.height) else Size(image.height, image.width)
         val bitmap = image.toBitmap()
