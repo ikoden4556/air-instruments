@@ -23,6 +23,9 @@ object Native {
     @JvmStatic external fun engineClear(engine: Long)
     @JvmStatic external fun engineSetKey(engine: Long, keyRoot: Int)
 
+    /** Predicted Plucks whose String was never crossed in time, so far. */
+    @JvmStatic external fun engineFalsePlucks(engine: Long): Int
+
     /** Starts the AAudio stream; packed info (bit 0 exclusive, bit 1 low latency, bits 8.. burst) or < 0. */
     @JvmStatic external fun audioStart(): Int
 

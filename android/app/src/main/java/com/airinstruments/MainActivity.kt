@@ -5,7 +5,12 @@ import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.opengl.GLSurfaceView
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.view.View
+import android.widget.TextView
+import java.util.concurrent.atomic.AtomicInteger
 import android.util.Range
 import android.util.Size
 import android.view.WindowManager
@@ -66,6 +71,21 @@ class MainActivity : ComponentActivity() {
     private var boottime: Boolean? = null
     private var lastSubmittedMs = -1L
 
+    // Latency readout (BLUEPRINT §4, Measuring latency).
+    private lateinit var readout: TextView
+    private val ui = Handler(Looper.getMainLooper())
+    private val cameraFrames = AtomicInteger()
+    private val results = AtomicInteger()
+    private val captureToResult = Rolling()
+    private val felt = FeltLatency()
+    @Volatile private var falsePlucks = 0
+    private val lastPluck = LongArray(2)
+    private val engineControls = object : Controls.Controlled {
+        override fun undo() = onEngine { Native.engineUndo(it) }
+        override fun clear() = onEngine { Native.engineClear(it) }
+        override fun setKey(root: Int) = onEngine { Native.engineSetKey(it, root) }
+    }
+
     /** Runs `action` with the Engine on the Engine thread, before the next frame. */
     fun onEngine(action: (Long) -> Unit) {
         engineActions += action
@@ -89,9 +109,26 @@ class MainActivity : ComponentActivity() {
             setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
         }
+        pluckListeners += { plucks, n, _ ->
+            for (i in 0 until n) {
+                val at = i * Native.PLUCK_NUMBERS
+                felt.onPluck(plucks[at + 3].toLong(), plucks[at + 4] == 1.0)
+            }
+        }
+        readout = readoutView(this)
         setContentView(FrameLayout(this).apply {
             addView(this@MainActivity.preview)
             addView(this@MainActivity.glView)
+            addView(this@MainActivity.readout)
+            addView(controlBar(this@MainActivity, engineControls) {
+                readout.visibility = if (readout.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            })
+        })
+        ui.post(object : Runnable {
+            override fun run() {
+                updateReadout()
+                ui.postDelayed(this, READOUT_MS)
+            }
         })
 
         audioInfo = Native.audioStart()
@@ -150,7 +187,27 @@ class MainActivity : ComponentActivity() {
         }, mainExecutor)
     }
 
+    private fun updateReadout() {
+        // Always follow the audio stream, so felt latency is recorded even while hidden.
+        if (Native.audioLastPluck(lastPluck)) felt.onSpeaker(lastPluck[0], lastPluck[1])
+        if (readout.visibility != View.VISIBLE) return
+        onEngine { falsePlucks = Native.engineFalsePlucks(it) }
+        val perSecond = 1000.0 / READOUT_MS
+        val info = audioInfo
+        readout.text = """
+            camera          ${(cameraFrames.getAndSet(0) * perSecond).toInt()} fps   results ${(results.getAndSet(0) * perSecond).toInt()}/s
+            capture→result  ${captureToResult.summary()}
+            audio out       ${"%.0f".format(Native.audioOutputLatencyMs(System.nanoTime()))} ms   ${if (info < 0) "error $info" else "exclusive=${info and 1 == 1} lowLatency=${info shr 1 and 1 == 1} burst=${info shr 8}"}
+            FELT            ${felt.all.summary()}
+              predicted     ${felt.predicted.summary()}
+              real          ${felt.real.summary()}
+            FALSE Plucks    $falsePlucks
+            (felt = speaker time − crossing time; predicted Plucks use the predicted crossing)
+        """.trimIndent()
+    }
+
     private fun analyze(image: ImageProxy) {
+        cameraFrames.incrementAndGet()
         val ts = image.imageInfo.timestamp
         val (bootNow, monoNow) = SystemClock.elapsedRealtimeNanos() to System.nanoTime()
         val boot = boottime ?: CameraClock.isBoottime(ts, bootNow, monoNow).also { boottime = it }
@@ -176,6 +233,8 @@ class MainActivity : ComponentActivity() {
         while (true) engineActions.poll()?.invoke(engine) ?: break
 
         val captureNs = result.timestampMs() * 1_000_000
+        results.incrementAndGet()
+        captureToResult.add((System.nanoTime() - captureNs) / 1e6)
         val points = result.landmarks().map { lm ->
             FloatArray(2 * HandFrame.LANDMARKS) { i -> if (i % 2 == 0) lm[i / 2].x() else lm[i / 2].y() }
         }
@@ -203,10 +262,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        ui.removeCallbacksAndMessages(null)
         landmarker?.close()
         landmarker = null
         analysisThread.shutdown()
         if (engine != 0L) Native.engineFree(engine)
         engine = 0L
+    }
+
+    private companion object {
+        const val READOUT_MS = 250L
     }
 }

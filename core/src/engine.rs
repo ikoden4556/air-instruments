@@ -124,6 +124,11 @@ impl Engine {
     pub fn set_key(&mut self, key: Key) {
         self.key = key;
     }
+
+    /// Predicted Plucks whose String was never crossed in time, so far.
+    pub fn false_plucks(&self) -> u32 {
+        self.prediction.false_plucks()
+    }
 }
 
 /// MediaPipe's index fingertip: the Plucker.
@@ -320,6 +325,18 @@ mod tests {
             fast.velocity > slow.velocity && fast.velocity <= 1.0,
             "{fast:?} {slow:?}"
         );
+    }
+
+    #[test]
+    fn a_fast_swipe_that_stops_short_of_a_string_counts_as_a_false_pluck() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        // 4.8 widths/s straight at the String, then stops dead at 0.46 for 300 ms.
+        s.play(4, |i| vec![right(0.5, 0.3 + 0.04 * i as f32, false)]);
+        s.play(18, |_| vec![right(0.5, 0.46, false)]);
+        assert_eq!(s.plucks.len(), 1, "predicted: {:?}", s.plucks);
+        assert!(s.plucks[0].predicted);
+        assert_eq!(s.engine.false_plucks(), 1);
     }
 
     #[test]
