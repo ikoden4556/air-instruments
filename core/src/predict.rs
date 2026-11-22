@@ -76,7 +76,7 @@ impl Prediction {
         self.pending
             .retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
         self.false_plucks += (before - self.pending.len()) as u32;
-        for (history, plucker) in self.history.iter_mut().zip(pluckers) {
+        for (i, (history, plucker)) in self.history.iter_mut().zip(pluckers).enumerate() {
             let Some(at) = plucker else {
                 history.clear();
                 continue;
@@ -98,7 +98,7 @@ impl Prediction {
                 continue;
             }
             for (string, s) in strings.iter().enumerate() {
-                if self.pending.iter().any(|(p, _)| p == s) {
+                if self.pending.iter().any(|(p, _)| p == s) || !self.crossing.armed(i, s) {
                     continue;
                 }
                 let Some((u, along)) = crossing_point(at, to, s) else {
@@ -248,9 +248,9 @@ mod tests {
     fn s5_a_prediction_within_60_ms_of_the_strings_last_pluck_is_jitter() {
         let strings = [across(0.5)];
         let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
-        // Left crosses down at 8 ms, then rests. Right comes up at 4 widths/s from 0.7:
-        // predicted from frame 2 to cross at 50 ms, only 42 ms after the left's Pluck.
-        let left = [0.48, 0.52, 0.52, 0.52, 0.52, 0.52];
+        // Left crosses down at 13.3 ms, then rests. Right comes up at 4 widths/s from 0.7:
+        // predicted from frame 2 to cross at 50 ms, only 37 ms after the left's Pluck.
+        let left = [0.4, 0.52, 0.52, 0.52, 0.52, 0.52];
         let mut plucks = Vec::new();
         for (i, &y) in left.iter().enumerate() {
             let t = i as u64 * FRAME;
@@ -259,9 +259,19 @@ mod tests {
         }
         assert_eq!(plucks.len(), 1, "{plucks:?}");
         assert!(
-            (plucks[0].timestamp_ns as f64 / 1e6 - 8.0).abs() < 1.0,
+            (plucks[0].timestamp_ns as f64 / 1e6 - 13.3).abs() < 1.0,
             "{plucks:?}"
         );
+        assert_eq!(pr.false_plucks(), 0);
+    }
+
+    #[test]
+    fn s9_a_plucker_appearing_on_a_string_is_not_predicted_to_pluck_it() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // Appears just below the String and moves up fast: it would cross at once.
+        let plucks = approach(&mut pr, &strings, 0.52, -1.5, 3).concat();
+        assert!(plucks.is_empty(), "{plucks:?}");
         assert_eq!(pr.false_plucks(), 0);
     }
 

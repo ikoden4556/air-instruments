@@ -26,6 +26,8 @@ pub struct Crossing {
     previous: [Option<Landmark>; 2],
     /// Strings Plucked in the last 60 ms, with when.
     recent: Vec<(Segment, u64)>,
+    /// S9: Strings each Plucker can't Pluck until it is `REARM` away from them.
+    disarmed: [Vec<Segment>; 2],
 }
 
 impl Crossing {
@@ -36,7 +38,13 @@ impl Crossing {
             previous_ns: 0,
             previous: [None; 2],
             recent: Vec::new(),
+            disarmed: Default::default(),
         }
+    }
+
+    /// S9: whether Plucker `i` (0 left, 1 right) may Pluck String `s` now.
+    pub(crate) fn armed(&self, i: usize, s: &Segment) -> bool {
+        !self.disarmed[i].contains(s)
     }
 
     /// Feeds one frame: its timestamp, the left and right Hand's Plucker
@@ -50,8 +58,18 @@ impl Crossing {
     ) -> Vec<Pluck> {
         let (t0, t1) = (self.previous_ns, timestamp_ns);
         let mut plucks = Vec::new();
-        for (from, to) in self.previous.into_iter().zip(pluckers) {
-            let (Some(from), Some(to)) = (from, to) else {
+        for (i, (from, to)) in self.previous.into_iter().zip(pluckers).enumerate() {
+            let Some(to) = to else {
+                self.disarmed[i].clear();
+                continue;
+            };
+            let Some(from) = from else {
+                // Just appeared (e.g. it stopped Pinching): not on the Strings it sits on.
+                self.disarmed[i] = strings
+                    .iter()
+                    .filter(|s| distance(to, s, self.aspect) < REARM)
+                    .copied()
+                    .collect();
                 continue;
             };
             let seconds = (t1 - t0) as f32 / 1e9;
@@ -60,6 +78,10 @@ impl Crossing {
                 let Some((u, along)) = crossing_point(from, to, s) else {
                     continue;
                 };
+                if !self.armed(i, s) {
+                    continue;
+                }
+                self.disarmed[i].push(*s);
                 let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
                 let pluck = Pluck {
                     string,
@@ -93,6 +115,12 @@ impl Crossing {
         });
         self.recent
             .retain(|&(_, t)| t1.saturating_sub(t) < JITTER_NS);
+        // S9: far enough from a String, a Plucker may Pluck it again.
+        for (disarmed, at) in self.disarmed.iter_mut().zip(pluckers) {
+            if let Some(at) = at {
+                disarmed.retain(|s| strings.contains(s) && distance(at, s, self.aspect) < REARM);
+            }
+        }
         self.previous_ns = timestamp_ns;
         self.previous = pluckers;
         plucks
@@ -101,6 +129,19 @@ impl Crossing {
 
 /// Re-crossing a String this soon after it Plucked is jitter, not a Pluck.
 pub(crate) const JITTER_NS: u64 = 60_000_000;
+
+/// S9: how far (screen widths) a Plucker must get from a String before it can Pluck it
+/// again, or Pluck it at all if it appeared that close.
+pub(crate) const REARM: f32 = 0.04;
+
+/// Distance in screen widths from `p` to String `s`.
+fn distance(p: Landmark, s: &Segment, aspect: f32) -> f32 {
+    let (a, b) = (s.left, s.right);
+    let (sx, sy) = (b.x - a.x, (b.y - a.y) * aspect);
+    let (px, py) = (p.x - a.x, (p.y - a.y) * aspect);
+    let v = ((px * sx + py * sy) / (sx * sx + sy * sy)).clamp(0.0, 1.0);
+    (px - v * sx).hypot(py - v * sy)
+}
 
 /// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does,
 /// and how far along the String (0 at its left Anchor, 1 at its right).
@@ -181,6 +222,35 @@ mod tests {
             micros(&c.update(116 * MS, [p(0.5, 0.4), None], &strings)),
             [108_000]
         );
+    }
+
+    #[test]
+    fn s9_a_finger_wiggling_on_a_string_plucks_it_once() {
+        let strings = [across(0.5)];
+        let mut c = Crossing::new(1.0);
+        c.update(0, [p(0.5, 0.4), None], &strings);
+        assert_eq!(c.update(100 * MS, [p(0.5, 0.51), None], &strings).len(), 1);
+        // Wiggles across it, slower than the 60 ms jitter guard but never far from it.
+        for (i, y) in [0.49, 0.52, 0.48, 0.51, 0.49].into_iter().enumerate() {
+            let t = (200 + 100 * i as u64) * MS;
+            assert!(c.update(t, [p(0.5, y), None], &strings).is_empty(), "wiggle {i}");
+        }
+        // Moves well away, then swipes back across: a new Pluck.
+        c.update(800 * MS, [p(0.5, 0.4), None], &strings);
+        assert_eq!(c.update(900 * MS, [p(0.5, 0.6), None], &strings).len(), 1);
+    }
+
+    #[test]
+    fn s9_a_plucker_appearing_on_a_string_cannot_pluck_it_until_it_moves_away() {
+        let strings = [across(0.5)];
+        let mut c = Crossing::new(1.0);
+        // The Hand that just let go of the Stretch: its fingertip on the String's end.
+        c.update(0, [None, None], &strings);
+        c.update(16 * MS, [None, p(0.79, 0.51)], &strings);
+        assert!(c.update(32 * MS, [None, p(0.79, 0.48)], &strings).is_empty());
+        // Away from the String, it Plucks as usual.
+        c.update(100 * MS, [None, p(0.6, 0.4)], &strings);
+        assert_eq!(c.update(200 * MS, [None, p(0.6, 0.6)], &strings).len(), 1);
     }
 
     #[test]
