@@ -80,3 +80,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] The GL layer shows over the camera preview (translucent media-overlay SurfaceView above the preview SurfaceView) and lines up with your fingers.
 - [ ] Strings glow with Fret ticks, vibrate and spark on Pluck, like the web version.
 - [ ] Drawing doesn't lower the hand-tracking rate (GPU shared with MediaPipe; it redraws only per camera result).
+
+## Android controls and latency (#36, and #11's Done-when)
+- [ ] Undo, Clear and Key (popup) work and are easy to hit on a stand.
+- [ ] Tap "ms" for the readout; check camera ~60 fps and results/s, capture→result, audio out, audio mode.
+- [ ] **#11 Done-when: FELT under 90 ms on the Oppo** over ~20 fast swipes, plus a few deliberate near-misses (FALSE Plucks count). Note: predicted Plucks are measured against the *predicted* crossing time; cross-check once with a 240 fps slow-motion video (BLUEPRINT §4).
