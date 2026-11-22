@@ -37,3 +37,22 @@ Findings:
 - Light matters: dim light costs about 24 ms (longer exposure).
 - Audio adds about 40 ms; exclusive mode was refused, so sound goes through the shared mixer.
 - Not yet tried: fixed 60 fps / high-speed session, skipping `toBitmap`, audio-only stream tuning.
+
+### Fix attempts (Oppo, no swipes: per-stage timings from the HUD, ~10 s each)
+
+| Variant | Camera fps | capture->arrive | convert | inference | capture->result | audio out |
+|---|---|---|---|---|---|---|
+| A front, AE range 15-60 (baseline) | 30 | 49 | 1.1 | 22 | 73 | 35 |
+| B front, manual exposure 8 ms / 16.7 ms frame | 30 | 42 | 1.6 | 24 | 68 | 34 |
+| C front, no preview stream | 30 | 49 | 1.2 | 24 | 75 | 34 |
+| D front, reuse bitmap, 1-burst audio buffer | 30 | 51 | 0.9 | 23 | 76 | 29 |
+| E back, AE [60,60] via Camera2Interop | 30 | 71 | 1.2 | 23 | 96 | 34 |
+| H back, CameraX setTargetFrameRate(60) | 60 | 57 | 3.9 | 31 | 92 | 35 |
+
+(ms averages; "audio out" = time for a sample written now to reach the speaker)
+
+Verdict:
+- The camera pipeline itself (sensor -> ISP -> app) costs ~45-55 ms and no setting moved it. 60 fps is only reachable on the back camera via `setTargetFrameRate`, and it did not lower latency (GPU contention raised inference instead).
+- Frame copy is ~1 ms: not worth optimising. Inference is ~23 ms on GPU.
+- Audio: 1-burst buffer saves ~6 ms (29 ms). Exclusive/MMAP is refused for third-party apps on this phone.
+- Floor on the Oppo ~ 50 camera + 24 inference + 29 audio ~ 105 ms. The 60 ms target is not reachable by tuning; only prediction (triggering a Pluck from the fingertip's velocity before it crosses) can hide the rest.

@@ -4,8 +4,10 @@ package com.airinstruments.spike
 object Native {
     init { System.loadLibrary("spikeaudio") }
 
-    @JvmStatic external fun start(): Int
+    @JvmStatic external fun start(bursts: Int): Int
     @JvmStatic external fun pluck(captureNs: Long)
     @JvmStatic external fun lastCaptureToSpeakerMs(): Double
+    @JvmStatic external fun outputLatencyMs(nowNs: Long): Double
+    @JvmStatic external fun bufferFrames(): Int
     @JvmStatic external fun info(): Int
 }

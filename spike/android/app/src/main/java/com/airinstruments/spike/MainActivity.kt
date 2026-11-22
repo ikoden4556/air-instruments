@@ -61,7 +61,22 @@ class MainActivity : ComponentActivity() {
     private var audioStart = 0
     private val captureToResult = ArrayDeque<Double>()
     private val captureToSpeaker = ArrayDeque<Double>()
+    private val captureToArrive = ArrayDeque<Double>()
+    private val convert = ArrayDeque<Double>()
+    private val inference = ArrayDeque<Double>()
+    private val audioOut = ArrayDeque<Double>()
+    private val submitted = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    @Volatile private var results = 0
     private var lastSpeaker = -1.0
+    private var reuse: android.graphics.Bitmap? = null
+
+    // variants, chosen with: adb shell am start -n ... --ei bufs 1 --ez preview false --es fps manual --ez reuse true
+    private val bufs by lazy { intent.getIntExtra("bufs", 2) }
+    private val withPreview by lazy { intent.getBooleanExtra("preview", true) }
+    private val fpsMode by lazy { intent.getStringExtra("fps") ?: "range" }
+    private val reuseBitmap by lazy { intent.getBooleanExtra("reuse", false) }
+
+    private fun add(a: ArrayDeque<Double>, v: Double) = synchronized(a) { a.addLast(v); if (a.size > 60) a.removeFirst() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +93,7 @@ class MainActivity : ComponentActivity() {
             addView(hud, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT))
         })
 
-        audioStart = Native.start()
+        audioStart = Native.start(bufs)
         landmarker = HandLandmarker.createFromOptions(this, HandLandmarker.HandLandmarkerOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task").setDelegate(Delegate.GPU).build())
             .setRunningMode(RunningMode.LIVE_STREAM)
@@ -98,14 +113,25 @@ class MainActivity : ComponentActivity() {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val provider = future.get()
-            val front = CameraSelector.DEFAULT_FRONT_CAMERA
+            val front = if (intent.getStringExtra("cam") == "back") CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
             val info = front.filter(provider.availableCameraInfos).first()
             val ranges = Camera2CameraInfo.from(info).getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
             val range = ranges?.filter { it.upper >= 60 }?.maxByOrNull { it.lower } ?: ranges?.maxByOrNull { it.upper } ?: Range(30, 30)
-            camInfo = "fps range $range of ${ranges?.joinToString()}"
+            camInfo = "${intent.getStringExtra("cam") ?: "front"} fps=$fpsMode range $range of ${ranges?.joinToString()}\n                preview=$withPreview reuse=$reuseBitmap bufs=$bufs"
+
+            // "manual": auto-exposure off, 8 ms exposure, 16.7 ms frame duration -> forces 60 fps regardless of light
+            fun tune(e: Camera2Interop.Extender<*>) {
+                if (fpsMode == "manual") {
+                    e.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    e.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, 8_000_000L)
+                    e.setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, 16_666_667L)
+                    e.setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, 1600)
+                } else e.setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+            }
 
             val previewBuilder = Preview.Builder()
-            Camera2Interop.Extender(previewBuilder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+            if (fpsMode == "target") previewBuilder.setTargetFrameRate(range)
+            tune(Camera2Interop.Extender(previewBuilder))
             val preview = previewBuilder.build().also { it.surfaceProvider = previewView.surfaceProvider }
 
             val analysisBuilder = ImageAnalysis.Builder()
@@ -113,11 +139,12 @@ class MainActivity : ComponentActivity() {
                     ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)).build())
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            Camera2Interop.Extender(analysisBuilder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+            tune(Camera2Interop.Extender(analysisBuilder))
             val analysis = analysisBuilder.build().also { it.setAnalyzer(analysisThread, ::analyze) }
 
             provider.unbindAll()
-            provider.bindToLifecycle(this, front, preview, analysis)
+            if (withPreview) provider.bindToLifecycle(this, front, preview, analysis)
+            else provider.bindToLifecycle(this, front, analysis)
         }, mainExecutor)
     }
 
@@ -127,17 +154,30 @@ class MainActivity : ComponentActivity() {
         // camera timestamps are either BOOTTIME (elapsedRealtime) or MONOTONIC (nanoTime); normalise to MONOTONIC
         val realtime = realtimeClock ?: (abs(ts - SystemClock.elapsedRealtimeNanos()) < abs(ts - System.nanoTime())).also { realtimeClock = it }
         val captureMono = if (realtime) ts - (SystemClock.elapsedRealtimeNanos() - System.nanoTime()) else ts
-        val bitmap = img.toBitmap()
+        val t0 = System.nanoTime()
+        add(captureToArrive, (t0 - captureMono) / 1e6)
+        val plane = img.planes[0]
+        val bitmap = if (reuseBitmap && plane.rowStride == img.width * 4) {
+            val b = reuse?.takeIf { it.width == img.width && it.height == img.height }
+                ?: android.graphics.Bitmap.createBitmap(img.width, img.height, android.graphics.Bitmap.Config.ARGB_8888).also { reuse = it }
+            plane.buffer.rewind(); b.copyPixelsFromBuffer(plane.buffer); b
+        } else img.toBitmap()
         val rotation = img.imageInfo.rotationDegrees
         img.close()
+        val t1 = System.nanoTime()
+        add(convert, (t1 - t0) / 1e6)
+        val tsMs = captureMono / 1_000_000
+        submitted[tsMs] = t1
         landmarker.detectAsync(BitmapImageBuilder(bitmap).build(),
-            ImageProcessingOptions.builder().setRotationDegrees(rotation).build(), captureMono / 1_000_000)
+            ImageProcessingOptions.builder().setRotationDegrees(rotation).build(), tsMs)
     }
 
     private fun onResult(r: HandLandmarkerResult) {
         val captureNs = r.timestampMs() * 1_000_000
         val now = System.nanoTime()
-        synchronized(captureToResult) { captureToResult.addLast((now - captureNs) / 1e6); if (captureToResult.size > 60) captureToResult.removeFirst() }
+        results++
+        add(captureToResult, (now - captureNs) / 1e6)
+        submitted.remove(r.timestampMs())?.let { add(inference, (now - it) / 1e6) }
         val dots = ArrayList<PointF>()
         val seen = HashSet<String>()
         r.landmarks().forEachIndexed { i, lm ->
@@ -166,19 +206,26 @@ class MainActivity : ComponentActivity() {
 
     private fun render() {
         val fps = frames * 2; frames = 0
+        val rps = results * 2; results = 0
+        if (submitted.size > 100) submitted.clear() // dropped frames never get a result
         if (plucks != readPlucks) {
             readPlucks = plucks
             lastSpeaker = Native.lastCaptureToSpeakerMs()
-            if (lastSpeaker > 0) synchronized(captureToSpeaker) { captureToSpeaker.addLast(lastSpeaker); if (captureToSpeaker.size > 60) captureToSpeaker.removeFirst() }
+            if (lastSpeaker > 0) add(captureToSpeaker, lastSpeaker)
         }
+        Native.outputLatencyMs(System.nanoTime()).let { if (it > 0) add(audioOut, it) }
         val i = Native.info()
         hud.text = """
 PROTOTYPE latency spike (native)  ${android.os.Build.MODEL}
-camera          $camInfo
-frames/s        $fps
+mode            $camInfo
+frames/s        camera $fps  results $rps
+capture->arrive ${stat(captureToArrive)}
+convert         ${stat(convert)}
+inference       ${stat(inference)}
 capture->result ${stat(captureToResult)}
+audio out       ${stat(audioOut)}
 capture->SPEAKER ${stat(captureToSpeaker)}  last ${"%.0f".format(lastSpeaker)} ms
-audio           start=$audioStart exclusive=${i and 1 == 1} lowlatency=${i shr 1 and 1 == 1} burst=${i shr 8}
+audio           start=$audioStart exclusive=${i and 1 == 1} lowlatency=${i shr 1 and 1 == 1} burst=${i shr 8} buffer=${Native.bufferFrames()}
 plucks          $plucks
 Swipe an index fingertip across the cyan line.""".trim()
     }

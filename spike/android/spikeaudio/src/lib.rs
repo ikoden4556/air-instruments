@@ -18,7 +18,7 @@ fn stream() -> Option<&'static AudioStream> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_airinstruments_spike_Native_start(_: Env, _: Class) -> i32 {
+pub extern "system" fn Java_com_airinstruments_spike_Native_start(_: Env, _: Class, bursts: i32) -> i32 {
     if stream().is_some() {
         return 0;
     }
@@ -46,11 +46,13 @@ pub extern "system" fn Java_com_airinstruments_spike_Native_start(_: Env, _: Cla
             .sharing_mode(AudioSharingMode::Exclusive)
             .format(AudioFormat::PCM_Float)
             .channel_count(1)
+            .usage(AudioUsage::Game)
+            .content_type(AudioContentType::Sonification)
             .data_callback(callback)
             .open_stream()
     });
     let Ok(s) = opened else { return -1 };
-    let _ = s.set_buffer_size_in_frames(s.frames_per_burst() * 2);
+    let _ = s.set_buffer_size_in_frames(s.frames_per_burst() * bursts);
     if s.request_start().is_err() {
         return -2;
     }
@@ -76,6 +78,21 @@ pub extern "system" fn Java_com_airinstruments_spike_Native_lastCaptureToSpeaker
     let Ok(ts) = s.timestamp(Clockid::Monotonic) else { return -1.0 };
     let presented_ns = ts.time_nanoseconds + (first - ts.frame_position) * 1_000_000_000 / s.sample_rate() as i64;
     (presented_ns - BEEP_CAPTURE_NS.load(Acquire)) as f64 / 1e6
+}
+
+/// Audio-only latency in ms: a frame written now reaches the speaker this far in the future.
+/// `now_ns` is System.nanoTime() (CLOCK_MONOTONIC) at the call.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_airinstruments_spike_Native_outputLatencyMs(_: Env, _: Class, now_ns: i64) -> f64 {
+    let Some(s) = stream() else { return -1.0 };
+    let Ok(ts) = s.timestamp(Clockid::Monotonic) else { return -1.0 };
+    let presented_ns = ts.time_nanoseconds + (s.frames_written() - ts.frame_position) * 1_000_000_000 / s.sample_rate() as i64;
+    (presented_ns - now_ns) as f64 / 1e6
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_airinstruments_spike_Native_bufferFrames(_: Env, _: Class) -> i32 {
+    stream().map_or(-1, |s| s.buffer_size_in_frames())
 }
 
 #[unsafe(no_mangle)]
