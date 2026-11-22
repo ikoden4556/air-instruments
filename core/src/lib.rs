@@ -7,3 +7,4 @@ pub mod pinch;
 pub mod pitch;
 pub mod predict;
 pub mod strings;
+pub mod synth;
