@@ -101,7 +101,7 @@ impl Prediction {
                 if self.pending.iter().any(|(p, _)| p == s) {
                     continue;
                 }
-                let Some(u) = crossing_point(at, to, s) else {
+                let Some((u, along)) = crossing_point(at, to, s) else {
                     continue;
                 };
                 let crosses_ns =
@@ -119,6 +119,8 @@ impl Prediction {
                     string,
                     timestamp_ns: crosses_ns,
                     velocity,
+                    along,
+                    predicted: true,
                 });
             }
         }

@@ -49,7 +49,12 @@ impl Synth {
     /// Fills `out` with the next mono samples of every Voice, through the soft limiter.
     pub fn render(&mut self, out: &mut [f32]) {
         for sample in out.iter_mut() {
-            let mix: f32 = self.voices.iter_mut().filter(|v| v.active).map(Voice::step).sum();
+            let mix: f32 = self
+                .voices
+                .iter_mut()
+                .filter(|v| v.active)
+                .map(Voice::step)
+                .sum();
             *sample = (mix * MIX_GAIN).tanh();
         }
     }
@@ -124,12 +129,13 @@ mod tests {
     /// The repeating frequency of `signal`, from its autocorrelation peak near `guess` Hz.
     fn measured_frequency(signal: &[f32], guess: f32) -> f32 {
         let period = RATE / guess;
-        let corr = |lag: usize| -> f32 {
-            signal.iter().zip(&signal[lag..]).map(|(a, b)| a * b).sum()
-        };
+        let corr =
+            |lag: usize| -> f32 { signal.iter().zip(&signal[lag..]).map(|(a, b)| a * b).sum() };
         let lo = (period * 0.8) as usize;
         let hi = (period * 1.2) as usize;
-        let best = (lo..=hi).max_by(|&a, &b| corr(a).total_cmp(&corr(b))).unwrap();
+        let best = (lo..=hi)
+            .max_by(|&a, &b| corr(a).total_cmp(&corr(b)))
+            .unwrap();
         // Parabolic fit through the peak for a sub-sample period.
         let (l, c, r) = (corr(best - 1), corr(best), corr(best + 1));
         let offset = 0.5 * (l - r) / (l - 2.0 * c + r);
@@ -187,7 +193,11 @@ mod tests {
         }
         let mut out = vec![0.0; 4_800];
         synth.render(&mut out);
-        assert!(peak(&out) < 1e-6, "the oldest Voice still sounds: {}", peak(&out));
+        assert!(
+            peak(&out) < 1e-6,
+            "the oldest Voice still sounds: {}",
+            peak(&out)
+        );
     }
 
     #[test]

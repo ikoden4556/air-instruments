@@ -97,7 +97,7 @@ const MAX_GAP_NS: u64 = 150_000_000;
 
 /// The Segment's on-screen length as a fraction of screen width;
 /// `aspect` is screen height / width.
-fn width_fraction(s: &Segment, aspect: f32) -> f32 {
+pub(crate) fn width_fraction(s: &Segment, aspect: f32) -> f32 {
     (s.right.x - s.left.x).hypot((s.right.y - s.left.y) * aspect)
 }
 

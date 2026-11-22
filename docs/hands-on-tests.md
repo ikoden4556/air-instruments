@@ -33,3 +33,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] It sounds like a warm steel-string guitar.
 - [ ] Ring time (3 s) and the Velocity brightness curve feel right.
 - [ ] A loud Strum with many Voices doesn't sound squashed by the limiter.
+
+## Engine (#8)
+- [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands.
+- [ ] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable.
+- [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident.
+- [ ] MediaPipe's left/right labels match the Player's Hands (mirrored preview).
