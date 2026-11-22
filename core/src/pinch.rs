@@ -21,9 +21,16 @@ impl PinchDetector {
         let l = &hand.landmarks;
         let (thumb, index) = (l[THUMB_TIP], l[INDEX_TIP]);
         let ratio = distance(thumb, index) / distance(l[WRIST], l[MIDDLE_KNUCKLE]);
-        let threshold = if self.pinching { RELEASE_BELOW } else { START_BELOW };
+        let threshold = if self.pinching {
+            RELEASE_BELOW
+        } else {
+            START_BELOW
+        };
         self.pinching = ratio < threshold;
-        self.pinching.then(|| Landmark { x: (thumb.x + index.x) / 2.0, y: (thumb.y + index.y) / 2.0 })
+        self.pinching.then(|| Landmark {
+            x: (thumb.x + index.x) / 2.0,
+            y: (thumb.y + index.y) / 2.0,
+        })
     }
 }
 
@@ -51,11 +58,23 @@ mod tests {
     /// index tip `gap` × size apart, side by side around (0.5, 0.5).
     fn hand(size: f32, gap: f32) -> Hand {
         let mut landmarks = [Landmark { x: 0.5, y: 0.5 }; LANDMARKS_PER_HAND];
-        landmarks[0] = Landmark { x: 0.5, y: 0.5 + size }; // wrist
+        landmarks[0] = Landmark {
+            x: 0.5,
+            y: 0.5 + size,
+        }; // wrist
         landmarks[9] = Landmark { x: 0.5, y: 0.5 }; // middle-finger knuckle
-        landmarks[4] = Landmark { x: 0.5 - gap * size / 2.0, y: 0.5 }; // thumb tip
-        landmarks[8] = Landmark { x: 0.5 + gap * size / 2.0, y: 0.5 }; // index tip
-        Hand { handedness: Handedness::Right, landmarks }
+        landmarks[4] = Landmark {
+            x: 0.5 - gap * size / 2.0,
+            y: 0.5,
+        }; // thumb tip
+        landmarks[8] = Landmark {
+            x: 0.5 + gap * size / 2.0,
+            y: 0.5,
+        }; // index tip
+        Hand {
+            handedness: Handedness::Right,
+            landmarks,
+        }
     }
 
     fn pinches(d: &mut PinchDetector, size: f32, gap: f32) -> bool {
@@ -89,7 +108,11 @@ mod tests {
         // Same hand shapes, one close to the camera (size 0.4), one far away (size 0.08).
         for gap in [0.5, 0.2, 0.27, 0.4] {
             let (mut near, mut far) = (PinchDetector::new(), PinchDetector::new());
-            assert_eq!(pinches(&mut near, 0.4, gap), pinches(&mut far, 0.08, gap), "gap {gap}");
+            assert_eq!(
+                pinches(&mut near, 0.4, gap),
+                pinches(&mut far, 0.08, gap),
+                "gap {gap}"
+            );
         }
         // A tip distance of 0.03 screen units is a Pinch for the near hand only.
         let (mut near, mut far) = (PinchDetector::new(), PinchDetector::new());
@@ -103,6 +126,9 @@ mod tests {
         h.landmarks[4] = Landmark { x: 0.30, y: 0.40 }; // thumb tip
         h.landmarks[8] = Landmark { x: 0.32, y: 0.42 }; // index tip
         let anchor = PinchDetector::new().update(&h).expect("pinching");
-        assert!((anchor.x - 0.31).abs() < 1e-6 && (anchor.y - 0.41).abs() < 1e-6, "{anchor:?}");
+        assert!(
+            (anchor.x - 0.31).abs() < 1e-6 && (anchor.y - 0.41).abs() < 1e-6,
+            "{anchor:?}"
+        );
     }
 }
