@@ -27,7 +27,12 @@ pub struct Crossing {
 impl Crossing {
     /// `aspect` is screen height / width, so speeds can be measured in screen widths.
     pub fn new(aspect: f32) -> Self {
-        Self { aspect, previous_ns: 0, previous: [None; 2], recent: Vec::new() }
+        Self {
+            aspect,
+            previous_ns: 0,
+            previous: [None; 2],
+            recent: Vec::new(),
+        }
     }
 
     /// Feeds one frame: its timestamp, the left and right Hand's Plucker
@@ -42,15 +47,26 @@ impl Crossing {
         let (t0, t1) = (self.previous_ns, timestamp_ns);
         let mut plucks = Vec::new();
         for (from, to) in self.previous.into_iter().zip(pluckers) {
-            let (Some(from), Some(to)) = (from, to) else { continue };
+            let (Some(from), Some(to)) = (from, to) else {
+                continue;
+            };
             let seconds = (t1 - t0) as f32 / 1e9;
             let velocity = (to.x - from.x).hypot((to.y - from.y) * self.aspect) / seconds;
             for (string, s) in strings.iter().enumerate() {
-                let Some(u) = crossing_point(from, to, s) else { continue };
+                let Some(u) = crossing_point(from, to, s) else {
+                    continue;
+                };
                 let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
-                let pluck = Pluck { string, timestamp_ns, velocity };
+                let pluck = Pluck {
+                    string,
+                    timestamp_ns,
+                    velocity,
+                };
                 // Both Pluckers crossed it this frame: one Pluck, the faster one's.
-                match plucks.iter_mut().find(|pl: &&mut Pluck| pl.string == string) {
+                match plucks
+                    .iter_mut()
+                    .find(|pl: &&mut Pluck| pl.string == string)
+                {
                     Some(other) if other.velocity < velocity => *other = pluck,
                     Some(_) => {}
                     None => plucks.push(pluck),
@@ -60,15 +76,17 @@ impl Crossing {
         plucks.sort_by_key(|pl| pl.timestamp_ns);
         plucks.retain(|pl| {
             let s = strings[pl.string];
-            let jitter = self.recent.iter().any(|&(r, t)| {
-                r == s && pl.timestamp_ns.saturating_sub(t) < JITTER_NS
-            });
+            let jitter = self
+                .recent
+                .iter()
+                .any(|&(r, t)| r == s && pl.timestamp_ns.saturating_sub(t) < JITTER_NS);
             if !jitter {
                 self.recent.push((s, pl.timestamp_ns));
             }
             !jitter
         });
-        self.recent.retain(|&(_, t)| t1.saturating_sub(t) < JITTER_NS);
+        self.recent
+            .retain(|&(_, t)| t1.saturating_sub(t) < JITTER_NS);
         self.previous_ns = timestamp_ns;
         self.previous = pluckers;
         plucks
@@ -107,12 +125,18 @@ mod tests {
 
     /// A String across the screen at height `y`.
     fn across(y: f32) -> Segment {
-        Segment { left: Landmark { x: 0.2, y }, right: Landmark { x: 0.8, y } }
+        Segment {
+            left: Landmark { x: 0.2, y },
+            right: Landmark { x: 0.8, y },
+        }
     }
 
     /// Pluck times to the nearest microsecond.
     fn micros(plucks: &[Pluck]) -> Vec<u64> {
-        plucks.iter().map(|pl| (pl.timestamp_ns + 500) / 1000).collect()
+        plucks
+            .iter()
+            .map(|pl| (pl.timestamp_ns + 500) / 1000)
+            .collect()
     }
 
     #[test]
@@ -137,13 +161,19 @@ mod tests {
         let mut c = Crossing::new(1.0);
         c.update(0, [p(0.5, 0.4), None], &strings);
         // Down: crosses at 8 ms.
-        assert_eq!(micros(&c.update(16 * MS, [p(0.5, 0.6), None], &strings)), [8_000]);
+        assert_eq!(
+            micros(&c.update(16 * MS, [p(0.5, 0.6), None], &strings)),
+            [8_000]
+        );
         // Jitters back up across it at 24 ms: ignored.
         assert!(c.update(33 * MS, [p(0.5, 0.4), None], &strings).is_empty());
         c.update(50 * MS, [p(0.5, 0.6), None], &strings); // crosses at 41 ms: ignored
         c.update(100 * MS, [p(0.5, 0.6), None], &strings);
         // Back up, crossing at 108 ms, 100 ms after the first Pluck: a second Pluck.
-        assert_eq!(micros(&c.update(116 * MS, [p(0.5, 0.4), None], &strings)), [108_000]);
+        assert_eq!(
+            micros(&c.update(116 * MS, [p(0.5, 0.4), None], &strings)),
+            [108_000]
+        );
     }
 
     #[test]
@@ -188,7 +218,13 @@ mod tests {
             let mut c = Crossing::new(1.0);
             // Left moves 0.2 in 100 ms (2 widths/s), right moves 0.6 (6 widths/s).
             let (slow, fast) = ([p(0.3, 0.4), p(0.3, 0.6)], [p(0.7, 0.2), p(0.7, 0.8)]);
-            let pair = |i: usize| if slow_first { [slow[i], fast[i]] } else { [fast[i], slow[i]] };
+            let pair = |i: usize| {
+                if slow_first {
+                    [slow[i], fast[i]]
+                } else {
+                    [fast[i], slow[i]]
+                }
+            };
             c.update(0, pair(0), &strings);
             let plucks = c.update(100 * MS, pair(1), &strings);
             assert_eq!(plucks.len(), 1, "{plucks:?}");
