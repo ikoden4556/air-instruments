@@ -24,9 +24,16 @@ pub fn parse(text: &str) -> Result<Trace, String> {
         .and_then(|(_, l)| l.strip_prefix("aspect "))
         .and_then(|a| a.trim().parse().ok())
         .ok_or("line 1: expected `aspect <number>`")?;
-    let frames = lines
-        .map(|(n, line)| frame(line).ok_or(format!("line {}: bad frame", n + 1)))
-        .collect::<Result<_, _>>()?;
+    let mut lines = lines.peekable();
+    let mut frames = Vec::new();
+    while let Some((n, line)) = lines.next() {
+        match frame(line) {
+            Some(f) => frames.push(f),
+            // The app can stop mid-line: an unfinished last line is dropped.
+            None if lines.peek().is_none() => {}
+            None => return Err(format!("line {}: bad frame", n + 1)),
+        }
+    }
     Ok(Trace { aspect, frames })
 }
 
@@ -199,6 +206,13 @@ mod tests {
         assert_eq!((s.crossings, s.missed, s.false_plucks), (2, 0, 0), "{s:?}");
         assert!(s.leads_ms.iter().all(|&l| l <= 0.0), "{s:?}");
         assert!(s.errors_ms.is_empty(), "{s:?}");
+    }
+
+    #[test]
+    fn a_last_line_cut_off_when_the_app_stopped_is_skipped() {
+        let trace = parse("aspect 0.75\n1000 0\n2000 1 1 0.5 0.").unwrap();
+        assert_eq!(trace.frames.len(), 1);
+        assert!(parse("aspect 0.75\n2000 1 1 0.5\n1000 0\n").is_err());
     }
 
     #[test]

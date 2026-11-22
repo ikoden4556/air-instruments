@@ -28,6 +28,10 @@ fn main() {
         let min = s.leads_ms.iter().copied().fold(f64::INFINITY, f64::min);
         let max = s.leads_ms.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let err = s.errors_ms.iter().sum::<f64>() / s.errors_ms.len().max(1) as f64;
+        let mut sorted = s.leads_ms.clone();
+        sorted.sort_by(f64::total_cmp);
+        let q = |f: f64| sorted.get((f * sorted.len() as f64) as usize).copied().unwrap_or(0.0);
+        eprintln!("         lead quartiles {:.0} / {:.0} / {:.0} ms", q(0.25), q(0.5), q(0.75));
         println!(
             "{ms:>6} ms  {:>9}  {:>6}  {:>5}  {:>9}  {lead:>6.0} {min:>5.0} {max:>5.0}     {:>8.0}     {err:>8.1}",
             s.crossings,
