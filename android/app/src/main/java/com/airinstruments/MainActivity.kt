@@ -18,10 +18,17 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
+import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -51,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var preview: PreviewView
     private lateinit var glView: GLSurfaceView
     private var landmarker: HandLandmarker? = null
+    @Volatile private var camera: Camera? = null
     private val analysisThread = Executors.newSingleThreadExecutor()
 
     private var engine = 0L
@@ -174,7 +182,7 @@ class MainActivity : ComponentActivity() {
             // Preview and analysis share the 4:3 frame, so landmarks line up with the preview.
             val ratio = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
             val analysis = ImageAnalysis.Builder()
-                .also { Camera2Interop.Extender(it).fps() }
+                .also { Camera2Interop.Extender(it).fps().setSessionCaptureCallback(shortExposureOnce(front)) }
                 .setResolutionSelector(
                     ResolutionSelector.Builder()
                         .setAspectRatioStrategy(ratio)
@@ -196,14 +204,44 @@ class MainActivity : ComponentActivity() {
             provider.unbindAll()
             // The front camera reaches 60 fps only this way, with the preview bound (phase 2 spike).
             try {
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, previewAt(fast ?: Range(60, 60)), analysis)
+                camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, previewAt(fast ?: Range(60, 60)), analysis)
                 Log.i(TAG, "camera bound with target 60 fps")
             } catch (e: IllegalArgumentException) {
                 Log.w(TAG, "60 fps refused, default rate: ${e.message}")
                 provider.unbindAll()
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, previewAt(null), analysis)
+                camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, previewAt(null), analysis)
             }
         }, mainExecutor)
+    }
+
+    /**
+     * Watches auto-exposure; once it has settled, swaps it for a [ShortExposure] of the same
+     * brightness so the camera can keep 60 fps. Applied once per camera start.
+     */
+    private fun shortExposureOnce(front: CameraInfo) = object : CameraCaptureSession.CaptureCallback() {
+        private var done = false
+        private var frames = 0
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            if (done) return
+            frames++
+            val converged = result.get(CaptureResult.CONTROL_AE_STATE) == CaptureResult.CONTROL_AE_STATE_CONVERGED
+            if (!converged && frames < SETTLE_FRAMES) return
+            done = true
+            val exposure = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: return
+            val iso = result.get(CaptureResult.SENSOR_SENSITIVITY) ?: return
+            val maxIso = Camera2CameraInfo.from(front)
+                .getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper ?: return
+            val short = ShortExposure.from(exposure, iso, maxIso)
+            Log.i(TAG, "auto exposure ${exposure / 1e6} ms ISO $iso → ${short ?: "kept"}")
+            if (short == null) return
+            val control = Camera2CameraControl.from(camera?.cameraControl ?: return)
+            control.setCaptureRequestOptions(CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, short.exposureNs)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, short.iso)
+                .setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, ShortExposure.FRAME_NS)
+                .build())
+        }
     }
 
     private fun updateReadout() {
@@ -291,6 +329,8 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val READOUT_MS = 250L
+        /** Frames to wait for auto-exposure to converge before taking its setting anyway. */
+        const val SETTLE_FRAMES = 60
         const val TAG = "AirInstruments"
     }
 }
