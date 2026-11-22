@@ -48,6 +48,11 @@ impl Prediction {
         }
     }
 
+    /// How far ahead to predict; 0 waits for every real crossing.
+    pub fn set_lookahead(&mut self, lookahead_ns: u64) {
+        self.lookahead_ns = lookahead_ns;
+    }
+
     /// Predicted Plucks whose String was never crossed in time, so far.
     pub fn false_plucks(&self) -> u32 {
         self.false_plucks

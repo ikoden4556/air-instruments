@@ -129,6 +129,11 @@ impl Engine {
         self.key = key;
     }
 
+    /// How far ahead Plucks are predicted; 0 waits for every real crossing.
+    pub fn set_lookahead(&mut self, lookahead_ns: u64) {
+        self.prediction.set_lookahead(lookahead_ns);
+    }
+
     /// Predicted Plucks whose String was never crossed in time, so far.
     pub fn false_plucks(&self) -> u32 {
         self.prediction.false_plucks()
@@ -346,6 +351,16 @@ mod tests {
             fast.velocity > slow.velocity && fast.velocity <= 1.0,
             "{fast:?} {slow:?}"
         );
+    }
+
+    #[test]
+    fn a_zero_lookahead_waits_for_the_real_crossing() {
+        let mut s = Script::new();
+        s.engine.set_lookahead(0);
+        s.build_string(0.5);
+        s.swipe_down(0.5, 5); // fast: predicted with the default lookahead
+        assert_eq!(s.plucks.len(), 1, "{:?}", s.plucks);
+        assert!(!s.plucks[0].predicted, "{:?}", s.plucks);
     }
 
     #[test]
