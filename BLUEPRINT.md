@@ -2,7 +2,7 @@
 
 An air string instrument played with bare hands in front of a phone camera. Pinch with both hands to stretch a glowing string between them, release to freeze it in the air, swipe an index fingertip across it to pluck. Fully offline, no recording, no uploads.
 
-Status: **phase 0 (setup) and phase 1 (domain model) done.** Vocabulary: `GLOSSARY.md`. Decisions: `docs/adr/`.
+Status: **phases 0 (setup), 1 (domain model) and 2 (latency spike) done.** Vocabulary: `GLOSSARY.md`. Decisions: `docs/adr/`.
 
 ---
 
@@ -40,15 +40,20 @@ Status: **phase 0 (setup) and phase 1 (domain model) done.** Vocabulary: `GLOSSA
 
 ### Latency targets (motion → sound)
 
-| Stage | Native Android | Web (iPhone 11 Safari) |
-|---|---|---|
-| Camera frame (60 / 30 fps) + readout | ~20 ms | ~35 ms |
-| Hand tracking (GPU) | ~10–20 ms | ~20–35 ms |
-| Crossing check + synth trigger | < 1 ms | < 2 ms |
-| Audio output (wired or speaker) | ~10–20 ms | ~20–40 ms |
-| **Target** | **< 60 ms** | **< 100 ms** |
+Measured on the Oppo Find X9 Pro in the phase 2 spike (see ADR 0004):
 
-Fingertip **prediction** (extrapolating the filtered fingertip path by the measured pipeline delay) hides part of the camera delay. Bluetooth audio adds 150 ms or more, so the app warns about it.
+| Stage | Native Android (measured) |
+|---|---|
+| Camera pipeline (sensor → app), front camera 60 fps | ~45–55 ms |
+| Hand tracking (GPU) | ~22–31 ms |
+| Crossing check + synth trigger | < 1 ms |
+| Audio output (shared AAudio, 1-burst buffer) | ~29 ms |
+| **Raw total** | **~105 ms** |
+| **Felt, with Pluck prediction** | **~91 ms** (predicted Plucks ~86 ms) |
+
+**Targets:** native under 90 ms felt (aim 60–70 ms on fast strums); web provisional under 150 ms felt, set after phase 4.
+
+Pluck **prediction** (firing when the filtered fingertip path will cross a String within a lookahead window) is required, not optional. Bluetooth audio adds 150 ms or more, so the app warns about it.
 
 ---
 
@@ -62,6 +67,7 @@ The core is pure logic with no platform code:
 - `pinch`: per-hand pinch detection with hysteresis (start below 0.22 × hand size, release above 0.32)
 - `strings`: string model (stretch, freeze, max 12, undo, clear)
 - `crossing`: swept segment intersection of the fingertip path against each string, plus a short per-string debounce
+- `predict`: fires a Pluck early when the filtered fingertip path will cross a string within the lookahead; suppresses the real crossing it predicted
 - `pitch`: length + position → pentatonic note → frequency
 - `synth`: Karplus-Strong voices with a voice pool, velocity from fingertip speed, a soft limiter, no allocations on the audio thread
 - `engine`: takes hand landmarks per frame and returns pluck events and render data
@@ -81,10 +87,10 @@ The core is pure logic with no platform code:
 ### Android shell: **Kotlin**
 | Part | Library or API |
 |---|---|
-| Camera | CameraX + Camera2Interop, 60 fps requested, falls back to 30 |
+| Camera | CameraX front camera, 60 fps via `Preview.Builder.setTargetFrameRate` (needs the preview bound; a Camera2Interop AE range alone stays at 30), falls back to 30 in dim light |
 | Hand tracking | `com.google.mediapipe:tasks-vision`, GPU delegate, LIVE_STREAM mode |
 | Core | Rust → `.so` via `cargo-ndk`, called over JNI |
-| Audio | AAudio, called from Rust: low-latency performance mode, exclusive sharing mode |
+| Audio | AAudio, called from Rust: low-latency performance mode, exclusive requested (the Oppo grants shared), buffer of 1 burst |
 | Drawing | OpenGL ES 3 on a transparent surface over the camera preview |
 
 ---
@@ -101,7 +107,7 @@ air-instruments/
 │   └── android/                # JNI wrapper + AAudio stream → android/
 ├── web/                        # Vite + TypeScript app (PWA)
 ├── android/                    # Gradle project, Kotlin shell
-├── spike/                      # Throwaway latency prototype (deleted after phase 2)
+│                               # (the phase 2 latency spike lives on branch spike/latency, not here)
 └── .github/workflows/pages.yml # Build web/ + wasm, deploy to GitHub Pages
 ```
 
@@ -117,8 +123,17 @@ air-instruments/
 | **3. Core** (`tdd`) | Each core module built test-first with `cargo test` on the PC | All core behaviour covered by tests |
 | **4. Web app** | Wire the core into the web shell. Develop over self-signed HTTPS on your Wi-Fi (`https://<pc-ip>:5173`), so the phones reload on each save | Playable on all 3 phones from the dev server |
 | **5. Deploy** | GitHub Actions builds and publishes to GitHub Pages; PWA install + offline check on the iPhone | Works from the public URL, including offline |
-| **6. Native Android** | Kotlin shell + the same core via JNI + AAudio + OpenGL ES | Under 60 ms measured on both Android phones |
+| **6. Native Android** | Kotlin shell + the same core via JNI + AAudio + OpenGL ES | Under 90 ms felt, measured on the Oppo |
 | **7. Tuning** | Prediction amount, pinch thresholds, guitar timbre, on-screen hints | Feels right to you |
+| **8. Latency tuning** | Try the deferred fixes below, one at a time, measured with the spike's HUD method | Each fix kept only if it lowers felt latency |
+
+### Deferred latency fixes (phase 8)
+Measured or estimated in the phase 2 spike; tried later, in this order:
+1. **Smarter prediction:** smooth over 4–5 frames and allow a longer lookahead (80–100 ms) without more FALSE Plucks. Est. 20–30 ms felt.
+2. **Fixed exposure in good light:** 8 ms exposure cut the camera delay ~53 → ~44 ms; needs a fallback to auto in dim rooms. Est. 5–10 ms.
+3. **No frame copy:** feed the camera buffer to MediaPipe directly (copy costs ~5 ms at 60 fps). Est. 3–5 ms.
+4. **Lighter hand model:** only fingertips are needed. Est. 5–10 ms.
+5. **Faster phones:** camera pipelines differ per phone; re-measure if other phones join.
 
 ### Measuring latency
 - **In-app:** timestamps at camera frame, hand result, pluck event and audio callback.
