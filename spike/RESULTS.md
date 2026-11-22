@@ -72,6 +72,10 @@ Verdict:
 - Naive two-frame linear velocity is noisy; the core should smooth (e.g. One Euro filter) and use more frames.
 - Realistic on the Oppo: ~85-90 ms felt for fast strums, ~105-140 ms for slow ones. 60 ms is not reachable on this hardware.
 - Odd: the 80 ms run reported buffer=512 although 1 burst was requested; not investigated.
+#### Prediction at 60 fps
+
+| Lookahead | Plucks | Predicted + crossed | Late fallback | FALSE | Felt avg / p95 (all) | Felt predicted avg / p95 / min | Felt fallback avg / p95 |
+|---|---|---|---|---|---|---|---|
 | 60 ms @ 60 fps front (CameraX setTargetFrameRate) | 21 | 16 | 2 | 3 | 91 / 143 ms (min 51) | 86 / 114 / 51 ms | 133 / 143 ms |
 
 60 fps verdict:
