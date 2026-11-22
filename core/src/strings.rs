@@ -69,6 +69,11 @@ impl Strings {
     pub fn strings(&self) -> &[Segment] {
         &self.strings
     }
+
+    /// Removes the newest String.
+    pub fn undo(&mut self) {
+        self.strings.pop();
+    }
 }
 
 /// The most Strings at once; Freezing another removes the oldest.
@@ -192,5 +197,19 @@ mod tests {
         assert_eq!(heights(&s), (0..12).collect::<Vec<_>>());
         freeze_nth(&mut s, 12);
         assert_eq!(heights(&s), (1..13).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn undo_removes_the_newest_string() {
+        let mut s = Strings::new(1.0);
+        for n in 0..3 {
+            freeze_nth(&mut s, n);
+        }
+        s.undo();
+        assert_eq!(heights(&s), [0, 1]);
+        s.undo();
+        s.undo();
+        s.undo(); // nothing left: no effect
+        assert!(s.strings().is_empty());
     }
 }
