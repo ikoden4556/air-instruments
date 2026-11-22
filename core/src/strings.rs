@@ -24,20 +24,30 @@ pub struct Segment {
 pub struct Strings {
     aspect: f32,
     stretch: Option<Segment>,
+    /// Timestamp of the last frame in which both Hands Pinched.
+    both_pinched_ns: u64,
     strings: Vec<Segment>,
 }
 
 impl Strings {
     /// `aspect` is screen height / width, so lengths can be measured in screen widths.
     pub fn new(aspect: f32) -> Self {
-        Self { aspect, stretch: None, strings: Vec::new() }
+        Self { aspect, stretch: None, both_pinched_ns: 0, strings: Vec::new() }
     }
 
     /// Feeds one frame: its timestamp and what each Hand is doing.
-    pub fn update(&mut self, _timestamp_ns: u64, left: HandState, right: HandState) {
+    pub fn update(&mut self, timestamp_ns: u64, left: HandState, right: HandState) {
+        use HandState::{Missing, Pinching};
         match (left, right) {
-            (HandState::Pinching(left), HandState::Pinching(right)) => {
+            (Pinching(left), Pinching(right)) => {
                 self.stretch = Some(Segment { left, right });
+                self.both_pinched_ns = timestamp_ns;
+            }
+            // A Hand out of tracking, and no Hand let go: the Stretch waits.
+            (Missing | Pinching(_), Missing | Pinching(_)) => {
+                if timestamp_ns.saturating_sub(self.both_pinched_ns) > MAX_GAP_NS {
+                    self.stretch = None;
+                }
             }
             _ => {
                 let aspect = self.aspect;
@@ -60,6 +70,9 @@ impl Strings {
 
 /// A Stretch shorter than this fraction of screen width is Discarded, not Frozen.
 const MIN_LENGTH: f32 = 0.08;
+
+/// How long a Hand of a Stretch may be out of tracking before the Stretch is Discarded.
+const MAX_GAP_NS: u64 = 150_000_000;
 
 /// The Segment's on-screen length as a fraction of screen width;
 /// `aspect` is screen height / width.
@@ -92,7 +105,6 @@ mod tests {
         s.update(66 * MS, at(0.2, 0.5), at(0.8, 0.5));
         let expected = Segment { left: Anchor { x: 0.2, y: 0.5 }, right: Anchor { x: 0.8, y: 0.5 } };
         assert_eq!(s.stretch(), Some(expected));
-        let _ = Missing;
     }
 
     #[test]
@@ -132,5 +144,27 @@ mod tests {
         assert_eq!(s.strings().len(), 2);
         stretch_then_release(&mut s, 150 * MS, (0.5, 0.500), (0.5, 0.535));
         assert_eq!(s.strings().len(), 2);
+    }
+
+    #[test]
+    fn s4_a_stretch_survives_150_ms_out_of_tracking_then_is_discarded() {
+        let mut s = Strings::new(1.0);
+        // The left Hand drops out for 150 ms and comes back still Pinching.
+        s.update(0, at(0.2, 0.5), at(0.8, 0.5));
+        s.update(100 * MS, Missing, at(0.8, 0.5));
+        s.update(150 * MS, Missing, at(0.8, 0.5));
+        assert!(s.stretch().is_some());
+        s.update(166 * MS, at(0.3, 0.5), at(0.8, 0.5));
+        s.update(183 * MS, at(0.3, 0.5), Open);
+        let frozen = Segment { left: Anchor { x: 0.3, y: 0.5 }, right: Anchor { x: 0.8, y: 0.5 } };
+        assert_eq!(s.strings(), &[frozen]);
+
+        // This time it stays out a frame longer: Discarded, and nothing Freezes after.
+        s.update(200 * MS, at(0.2, 0.5), at(0.8, 0.5));
+        s.update(300 * MS, at(0.2, 0.5), Missing);
+        s.update(366 * MS, at(0.2, 0.5), Missing);
+        assert_eq!(s.stretch(), None);
+        s.update(383 * MS, Open, Open);
+        assert_eq!(s.strings(), &[frozen]);
     }
 }
