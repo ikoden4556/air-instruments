@@ -67,21 +67,22 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Offline: after one visit, turn on airplane mode and open it again; it starts and tracks hands.
 
 ## Android audio (#33)
-- [ ] The AAudio stream opens low-latency at 48 kHz with a 1-burst buffer (readout info: shared/exclusive, burst); no crackles while playing hard Strums.
-- [ ] Audio output latency is near the spike's ~29 ms.
+- [x] The AAudio stream opens low-latency, shared (exclusive refused), burst 256. (2026-11-22) Crackles under hard Strums not checked yet.
+- [x] Audio output latency is near the spike's ~29 ms: 26–30 ms. (2026-11-22)
 
 ## Android shell (#34)
-- [ ] Install: `cd android; .\gradlew.bat installDebug` with the Oppo plugged in; it asks for the camera only and starts.
-- [ ] The front camera really runs at 60 fps (`setTargetFrameRate(60, 60)`; falls back to the default rate if the phone refuses).
-- [ ] The debug drawing sits on your fingers (preview and analysis both 4:3, FILL_CENTER crop) and left/right are your own hands.
-- [ ] Pinch, Freeze and Pluck work end to end and Plucks sound.
+- [x] Install: `cd android; .\gradlew.bat installDebug` with the Oppo plugged in; it asks for the camera only and starts. (2026-11-22)
+- [ ] **FAILS** — the front camera really runs at 60 fps. First 32 fps; with the AE range also set on both streams (fix on `fix-android-camera-fps`) 44 fps facing the ceiling, but **20–28 fps while playing** under one ceiling light (motion blur: long exposure). Retry in brighter light.
+- [x] The drawing sits on your fingers: Anchors land on the pinching fingertips; hand skeleton follows the hands. (2026-11-22)
+- [x] Pinch, Freeze and Pluck work end to end and Plucks sound. (2026-11-22) **But extra notes:** 39 FALSE Plucks in ~20 s of play with 12 Strings.
 
 ## Android drawing (#35)
-- [ ] The GL layer shows over the camera preview (translucent media-overlay SurfaceView above the preview SurfaceView) and lines up with your fingers.
-- [ ] Strings glow with Fret ticks, vibrate and spark on Pluck, like the web version.
+- [x] The GL layer shows over the camera preview and lines up with your fingers. (2026-11-22)
+- [x] Strings glow with Fret ticks and spark on Pluck. (2026-11-22) Vibration not looked at closely yet.
 - [ ] Drawing doesn't lower the hand-tracking rate (GPU shared with MediaPipe; it redraws only per camera result).
 
 ## Android controls and latency (#36, and #11's Done-when)
 - [ ] Undo, Clear and Key (popup) work and are easy to hit on a stand.
 - [ ] Tap "ms" for the readout; check camera ~60 fps and results/s, capture→result, audio out, audio mode.
-- [ ] **#11 Done-when: FELT under 90 ms on the Oppo** over ~20 fast swipes, plus a few deliberate near-misses (FALSE Plucks count). Note: predicted Plucks are measured against the *predicted* crossing time; cross-check once with a 240 fps slow-motion video (BLUEPRINT §4).
+- [x] The readout works (2026-11-22). First run, one ceiling light: camera 20–28 fps, capture→result 108–117 ms, FELT avg 133–153 ms (predicted ~110, real ~160), FALSE 39.
+- [ ] **#11 Done-when: FELT under 90 ms on the Oppo** (not met yet: 133–153 ms in dim light) over ~20 fast swipes, plus a few deliberate near-misses (FALSE Plucks count). Note: predicted Plucks are measured against the *predicted* crossing time; cross-check once with a 240 fps slow-motion video (BLUEPRINT §4).
