@@ -1,4 +1,10 @@
 // Serves MediaPipe's wasm files from the app itself, so it works offline.
-import { cpSync } from 'node:fs';
+// Only the non-module build: FilesetResolver.forVisionTasks(base) without useModule loads these.
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 
-cpSync('node_modules/@mediapipe/tasks-vision/wasm', 'public/mediapipe', { recursive: true });
+const from = 'node_modules/@mediapipe/tasks-vision/wasm';
+rmSync('public/mediapipe', { recursive: true, force: true });
+mkdirSync('public/mediapipe', { recursive: true });
+for (const file of ['vision_wasm_internal.js', 'vision_wasm_internal.wasm']) {
+  copyFileSync(`${from}/${file}`, `public/mediapipe/${file}`);
+}

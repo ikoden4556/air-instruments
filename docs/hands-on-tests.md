@@ -60,3 +60,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 ## Web controls (#26)
 - [ ] Undo, Clear and Key are easy to hit with the phone on a stand, and don't get in the way of playing (top edge).
 - [ ] Changing the Key changes the notes of existing Strings straight away.
+
+## Deploy and offline (#10)
+- [ ] The public URL (https://ikoden4556.github.io/air-instruments/) plays on the Oppo and the iPhone.
+- [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right.
+- [ ] Offline: after one visit, turn on airplane mode and open it again; it starts and tracks hands.
