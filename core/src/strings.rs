@@ -35,10 +35,12 @@ impl Strings {
 
     /// Feeds one frame: its timestamp and what each Hand is doing.
     pub fn update(&mut self, _timestamp_ns: u64, left: HandState, right: HandState) {
-        self.stretch = match (left, right) {
-            (HandState::Pinching(left), HandState::Pinching(right)) => Some(Segment { left, right }),
-            _ => None,
-        };
+        match (left, right) {
+            (HandState::Pinching(left), HandState::Pinching(right)) => {
+                self.stretch = Some(Segment { left, right });
+            }
+            _ => self.strings.extend(self.stretch.take()),
+        }
     }
 
     pub fn stretch(&self) -> Option<Segment> {
@@ -77,5 +79,21 @@ mod tests {
         let expected = Segment { left: Anchor { x: 0.2, y: 0.5 }, right: Anchor { x: 0.8, y: 0.5 } };
         assert_eq!(s.stretch(), Some(expected));
         let _ = Missing;
+    }
+
+    #[test]
+    fn s2_the_first_hand_to_stop_pinching_freezes_the_stretch() {
+        let mut s = Strings::new(1.0);
+        s.update(0, at(0.2, 0.5), at(0.8, 0.5));
+        s.update(16 * MS, at(0.2, 0.4), at(0.8, 0.6));
+        // Left lets go; the String is where the Anchors were in the last frame both Pinched.
+        s.update(33 * MS, Open, at(0.9, 0.9));
+        let frozen = Segment { left: Anchor { x: 0.2, y: 0.4 }, right: Anchor { x: 0.8, y: 0.6 } };
+        assert_eq!(s.strings(), &[frozen]);
+        assert_eq!(s.stretch(), None);
+        // The right Hand still Pinching, then letting go, adds nothing.
+        s.update(50 * MS, Open, at(0.9, 0.8));
+        s.update(66 * MS, Open, Open);
+        assert_eq!(s.strings(), &[frozen]);
     }
 }
