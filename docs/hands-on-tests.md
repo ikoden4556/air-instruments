@@ -64,8 +64,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 ## Deploy and offline (#10)
 - [x] The public URL (https://ikoden4556.github.io/air-instruments/) plays on the Oppo (2026-11-22, Chrome): tracking, Strings, sparks, sound, no extra notes heard. **Clearly slower than the native app** (not measured: the web app has no latency readout yet). Page stayed portrait because the phone's auto-rotate was off; the Player says that's a phone setting, not an app problem.
 - [ ] The public URL plays on the iPhone.
-- [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right.
-- [ ] Offline: after one visit, turn on airplane mode and open it again; it starts and tracks hands.
+- [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right. Oppo 2026-11-22: installs, opens fullscreen landscape. **First open reported "completely black, camera did not load"; not reproduced** — on the second open (watched over Chrome remote debugging) Tap to start → camera 640x480, MediaPipe GPU running, no errors in 2 min. Open question to the Player: was "Tap to start" visible on the black screen? **Small bug: a black strip on the left edge** (front-camera cutout; needs `viewport-fit=cover`).
+- [ ] Offline: open it with no internet at all and it starts and tracks hands. Not proven yet: the Oppo's airplane mode was on but Wi-Fi was connected. Retry with Wi-Fi off.
 
 ## Android audio (#33)
 - [x] The AAudio stream opens low-latency, shared (exclusive refused), burst 256. (2026-11-22) Crackles under hard Strums not checked yet.
