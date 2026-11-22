@@ -65,3 +65,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] The public URL (https://ikoden4556.github.io/air-instruments/) plays on the Oppo and the iPhone.
 - [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right.
 - [ ] Offline: after one visit, turn on airplane mode and open it again; it starts and tracks hands.
+
+## Android audio (#33)
+- [ ] The AAudio stream opens low-latency at 48 kHz with a 1-burst buffer (readout info: shared/exclusive, burst); no crackles while playing hard Strums.
+- [ ] Audio output latency is near the spike's ~29 ms.
