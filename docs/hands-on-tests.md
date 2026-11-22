@@ -39,3 +39,9 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable.
 - [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident.
 - [ ] MediaPipe's left/right labels match the Player's Hands (mirrored preview).
+
+## Web shell (#23)
+- [ ] On the Oppo: `adb reverse tcp:5173 tcp:5173`, `npm run dev` in `web/`, open https://localhost:5173, tap to start; the camera and hand tracking start (http://localhost also works over adb reverse).
+- [ ] Strings, Stretch, Anchors and Pluckers in the debug drawing sit on your real fingers (mirroring, cover crop).
+- [ ] Frames per second: hand tracking keeps up (spike: ~16–20 processed frames/s on Chrome).
+- [ ] The swapped MediaPipe labels really give your own left and right (`frame.ts`).

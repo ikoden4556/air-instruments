@@ -1,0 +1,21 @@
+{
+  "name": "air-instruments-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/copy-mediapipe.mjs",
+    "wasm": "node scripts/build-wasm.mjs",
+    "model": "node scripts/fetch-model.mjs",
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm && tsc --noEmit && vite build",
+    "test": "npm run wasm && vitest run"
+  },
+  "devDependencies": {
+    "@mediapipe/tasks-vision": "1.2.3",
+    "@types/node": "^26.6.6",
+    "@vitejs/plugin-basic-ssl": "2.3.0",
+    "typescript": "^7.0.2",
+    "vite": "8.3.8",
+    "vitest": "^5.1.1"
+  }
+}
