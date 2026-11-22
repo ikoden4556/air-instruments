@@ -14,6 +14,11 @@ const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const start = document.getElementById('start') as HTMLButtonElement;
 const status = document.getElementById('status')!;
 
+// Offline PWA: the service worker (built by vite.config.ts) pre-caches the whole app.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch((e: unknown) => console.warn('service worker', e));
+}
+
 /** Called with each frame's Plucks; the audio and drawing code hook in here. */
 export const pluckListeners: ((plucks: PluckEvent[]) => void)[] = [];
 
