@@ -54,6 +54,9 @@ impl Strings {
                 let long_enough = |s: &Segment| width_fraction(s, aspect) >= MIN_LENGTH;
                 let frozen = self.stretch.take().filter(long_enough);
                 self.strings.extend(frozen);
+                if self.strings.len() > MAX_STRINGS {
+                    self.strings.remove(0);
+                }
             }
         }
     }
@@ -67,6 +70,9 @@ impl Strings {
         &self.strings
     }
 }
+
+/// The most Strings at once; Freezing another removes the oldest.
+const MAX_STRINGS: usize = 12;
 
 /// A Stretch shorter than this fraction of screen width is Discarded, not Frozen.
 const MIN_LENGTH: f32 = 0.08;
@@ -166,5 +172,25 @@ mod tests {
         assert_eq!(s.stretch(), None);
         s.update(383 * MS, Open, Open);
         assert_eq!(s.strings(), &[frozen]);
+    }
+
+    /// Freezes String number `n` (0, 1, 2, ...), each at its own height.
+    fn freeze_nth(s: &mut Strings, n: u64) {
+        stretch_then_release(s, n * 50 * MS, (0.2, n as f32 / 20.0), (0.8, n as f32 / 20.0));
+    }
+
+    fn heights(s: &Strings) -> Vec<u64> {
+        s.strings().iter().map(|seg| (seg.left.y * 20.0).round() as u64).collect()
+    }
+
+    #[test]
+    fn a_13th_string_removes_the_oldest() {
+        let mut s = Strings::new(1.0);
+        for n in 0..12 {
+            freeze_nth(&mut s, n);
+        }
+        assert_eq!(heights(&s), (0..12).collect::<Vec<_>>());
+        freeze_nth(&mut s, 12);
+        assert_eq!(heights(&s), (1..13).collect::<Vec<_>>());
     }
 }
