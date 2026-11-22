@@ -1,6 +1,7 @@
 // The web shell: camera → MediaPipe → the Rust Engine, once per camera frame.
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { createAudioContext, startSynth } from './audio';
+import { mountControls } from './controls';
 import { Engine, type PluckEvent } from './core';
 import { drawDebug } from './draw2d';
 import { toScreenHands } from './frame';
@@ -43,6 +44,7 @@ async function run(audio: AudioContext): Promise<void> {
     numHands: 2,
   });
   const engine = new Engine(core, video.videoHeight / video.videoWidth, 0);
+  mountControls(engine);
   // WebGL2 where available; the plain 2D debug drawing otherwise.
   const gl = GlRenderer.create(canvas);
   const ctx = gl ? null : canvas.getContext('2d');

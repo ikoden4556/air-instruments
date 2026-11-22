@@ -56,3 +56,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] A Plucked String's vibration and sparks look right and land where the finger crossed.
 - [ ] The faint hand skeleton helps rather than distracts.
 - [ ] Drawing doesn't slow hand tracking (frames/s with and without WebGL; the 2D fallback is used only without WebGL2).
+
+## Web controls (#26)
+- [ ] Undo, Clear and Key are easy to hit with the phone on a stand, and don't get in the way of playing (top edge).
+- [ ] Changing the Key changes the notes of existing Strings straight away.
