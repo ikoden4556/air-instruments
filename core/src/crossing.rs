@@ -1,0 +1,112 @@
+//! Plucks: each Plucker's path between two frames, tested against every String.
+
+use crate::frame::Landmark;
+use crate::strings::Segment;
+
+/// One String Plucked once.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Pluck {
+    /// Index into the Strings passed to `Crossing::update`.
+    pub string: usize,
+    /// When the Plucker crossed, interpolated between the two frames.
+    pub timestamp_ns: u64,
+    /// The Plucker's speed while crossing, in screen widths per second.
+    pub velocity: f32,
+}
+
+/// Remembers each Plucker's last position to find the Strings it crosses next.
+#[derive(Debug, Clone)]
+pub struct Crossing {
+    aspect: f32,
+    previous_ns: u64,
+    previous: [Option<Landmark>; 2],
+}
+
+impl Crossing {
+    /// `aspect` is screen height / width, so speeds can be measured in screen widths.
+    pub fn new(aspect: f32) -> Self {
+        Self { aspect, previous_ns: 0, previous: [None; 2] }
+    }
+
+    /// Feeds one frame: its timestamp, the left and right Hand's Plucker
+    /// (`None` while that Hand Pinches or is out of tracking), and the Strings.
+    /// Returns the Plucks since the previous frame, in the order they happened.
+    pub fn update(
+        &mut self,
+        timestamp_ns: u64,
+        pluckers: [Option<Landmark>; 2],
+        strings: &[Segment],
+    ) -> Vec<Pluck> {
+        let (t0, t1) = (self.previous_ns, timestamp_ns);
+        let mut plucks = Vec::new();
+        for (from, to) in self.previous.into_iter().zip(pluckers) {
+            let (Some(from), Some(to)) = (from, to) else { continue };
+            let seconds = (t1 - t0) as f32 / 1e9;
+            let velocity = (to.x - from.x).hypot((to.y - from.y) * self.aspect) / seconds;
+            for (string, s) in strings.iter().enumerate() {
+                if let Some(u) = crossing_point(from, to, s) {
+                    let timestamp_ns = t0 + ((t1 - t0) as f64 * u as f64).round() as u64;
+                    plucks.push(Pluck { string, timestamp_ns, velocity });
+                }
+            }
+        }
+        plucks.sort_by_key(|pl| pl.timestamp_ns);
+        self.previous_ns = timestamp_ns;
+        self.previous = pluckers;
+        plucks
+    }
+}
+
+/// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does.
+/// A Plucker resting exactly on the String counts as on its upper side,
+/// so the crossing is found in one frame only.
+fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Option<f32> {
+    let (a, b) = (s.left, s.right);
+    let side = |p: Landmark| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    let (d0, d1) = (side(from), side(to));
+    if (d0 > 0.0) == (d1 > 0.0) {
+        return None;
+    }
+    let u = d0 / (d0 - d1);
+    let (qx, qy) = (from.x + u * (to.x - from.x), from.y + u * (to.y - from.y));
+    let (sx, sy) = (b.x - a.x, b.y - a.y);
+    let v = ((qx - a.x) * sx + (qy - a.y) * sy) / (sx * sx + sy * sy);
+    (0.0..=1.0).contains(&v).then_some(u)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MS: u64 = 1_000_000;
+
+    fn p(x: f32, y: f32) -> Option<Landmark> {
+        Some(Landmark { x, y })
+    }
+
+    /// A String across the screen at height `y`.
+    fn across(y: f32) -> Segment {
+        Segment { left: Landmark { x: 0.2, y }, right: Landmark { x: 0.8, y } }
+    }
+
+    /// Pluck times to the nearest microsecond.
+    fn micros(plucks: &[Pluck]) -> Vec<u64> {
+        plucks.iter().map(|pl| (pl.timestamp_ns + 500) / 1000).collect()
+    }
+
+    #[test]
+    fn a_strum_plucks_each_string_in_order() {
+        let strings = [across(0.6), across(0.4), across(0.5)];
+        let mut c = Crossing::new(1.0);
+        assert!(c.update(0, [p(0.5, 0.3), None], &strings).is_empty());
+        // Down 0.4 of the width in 100 ms: 4 screen widths per second.
+        let plucks = c.update(100 * MS, [p(0.5, 0.7), None], &strings);
+        let order: Vec<_> = plucks.iter().map(|pl| pl.string).collect();
+        assert_eq!(order, [1, 2, 0]);
+        // y = 0.4 is a quarter of the way down the path, 0.5 half, 0.6 three quarters.
+        assert_eq!(micros(&plucks), [25_000, 50_000, 75_000]);
+        for pl in &plucks {
+            assert!((pl.velocity - 4.0).abs() < 1e-4, "{pl:?}");
+        }
+    }
+}
