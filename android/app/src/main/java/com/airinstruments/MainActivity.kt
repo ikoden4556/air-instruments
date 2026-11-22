@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
     @Volatile var audioInfo = 0
         private set
 
+    /** Every frame's Hands, written on the Engine thread when started with `--ez trace true`. */
+    private var trace: java.io.BufferedWriter? = null
+
     private var boottime: Boolean? = null
     private var lastSubmittedMs = -1L
 
@@ -285,7 +288,15 @@ class MainActivity : ComponentActivity() {
     private fun onResult(result: HandLandmarkerResult, @Suppress("UNUSED_PARAMETER") input: MPImage) {
         if (engine == 0L) {
             val size = imageSize
-            engine = Native.engineNew(size.height.toFloat() / size.width, 0)
+            val aspect = size.height.toFloat() / size.width
+            engine = Native.engineNew(aspect, 0)
+            // Tuning (#44): `adb shell am start -n com.airinstruments/.MainActivity --ei lookahead_ms 80 --ez trace true`
+            val lookaheadMs = intent.getIntExtra("lookahead_ms", -1)
+            if (lookaheadMs >= 0) Native.engineSetLookahead(engine, lookaheadMs * 1_000_000L)
+            if (intent.getBooleanExtra("trace", false)) {
+                trace = java.io.File(filesDir, "trace.txt").bufferedWriter().apply { write("aspect $aspect\n") }
+            }
+            Log.i(TAG, "engine: lookahead ${if (lookaheadMs >= 0) "$lookaheadMs ms" else "default"}, trace ${trace != null}")
         }
         while (true) engineActions.poll()?.invoke(engine) ?: break
 
@@ -297,6 +308,16 @@ class MainActivity : ComponentActivity() {
         }
         val labels = result.handedness().map { it.firstOrNull()?.categoryName() ?: "" }
         val count = HandFrame.write(points, labels, hands)
+        trace?.let { t ->
+            // One frame per line, as core/src/trace.rs reads it.
+            t.write(StringBuilder().apply {
+                append(captureNs).append(' ').append(count)
+                for (i in 0 until count * HandFrame.HAND_FLOATS) append(' ').append(hands[i])
+                append('\n')
+            }.toString())
+            // Flushed here, on the thread that writes, about once a second.
+            if (results.get() % 60 == 0) t.flush()
+        }
         val found = Native.engineUpdate(engine, captureNs, hands, count, plucks)
         // The scene first, so Pluck listeners see the Strings the Pluck indices refer to.
         scene = RenderData.parse(render, Native.engineRender(engine, render))
