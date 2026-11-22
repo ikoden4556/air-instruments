@@ -26,16 +26,16 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Watch `false_plucks()` while playing; tune lookahead/cutoff if it climbs.
 
 ## Pitch (#6)
-- [ ] String length → Base note feels playable: 1 Key step per 0.1 screen width, longest String = root in octave 3.
-- [ ] 5 Frets per String is easy to aim at.
+- [x] String length → Base note feels playable: 1 Key step per 0.1 screen width, longest String = root in octave 3. (Oppo 2026-11-22)
+- [x] 5 Frets per String is easy to aim at. (Oppo 2026-11-22)
 
 ## Synth (#7)
-- [ ] It sounds like a warm steel-string guitar.
-- [ ] Ring time (3 s) and the Velocity brightness curve feel right.
-- [ ] A loud Strum with many Voices doesn't sound squashed by the limiter.
+- [x] It sounds like a warm steel-string guitar. (Oppo 2026-11-22)
+- [x] Ring time (3 s) and the Velocity brightness curve feel right. (Oppo 2026-11-22)
+- [x] A loud Strum with many Voices doesn't sound squashed by the limiter. (Oppo 2026-11-22)
 
 ## Engine (#8)
-- [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands.
+- [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands. Oppo 2026-11-22: steady, but laggy on fast swipes (see Filter #1).
 - [ ] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable.
 - [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident.
 - [x] MediaPipe's left/right labels match the Player's Hands (mirrored preview). (Oppo 2026-11-22, Android)
