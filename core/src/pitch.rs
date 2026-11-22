@@ -15,6 +15,14 @@ pub fn frequency(key: Key, length: f32, fret: usize) -> f32 {
     440.0 * 2f32.powf((midi - 69) as f32 / 12.0)
 }
 
+/// The Fret at `t` along a String, from 0 at its left Anchor to 1 at its right.
+pub fn fret_at(t: f32) -> usize {
+    ((t.max(0.0) * FRETS as f32) as usize).min(FRETS - 1)
+}
+
+/// Frets per String: one pentatonic octave.
+pub const FRETS: usize = 5;
+
 /// How many Key steps above the lowest note a String's Base note is:
 /// one step per `LENGTH_PER_STEP` shorter than a full screen width.
 fn base_step(length: f32) -> usize {
@@ -68,6 +76,45 @@ mod tests {
         for (got, want) in hz.iter().zip([220.00, 261.63, 293.66, 329.63, 392.00]) {
             assert!(close(*got, want), "{hz:?}");
         }
+    }
+
+    #[test]
+    fn changing_the_key_root_shifts_every_note() {
+        let d = Key { root: 2 };
+        // D major pentatonic from D3: D3 E3 F#3 A3 B3; 0.6 wide is 4 steps up, from B3: B3 D4 E4 F#4 A4.
+        let full: Vec<f32> = (0..5).map(|f| frequency(d, 1.0, f)).collect();
+        for (got, want) in full.iter().zip([146.83, 164.81, 185.00, 220.00, 246.94]) {
+            assert!(close(*got, want), "{full:?}");
+        }
+        let short: Vec<f32> = (0..5).map(|f| frequency(d, 0.6, f)).collect();
+        for (got, want) in short.iter().zip([246.94, 293.66, 329.63, 369.99, 440.00]) {
+            assert!(close(*got, want), "{short:?}");
+        }
+    }
+
+    #[test]
+    fn the_same_string_and_fret_always_give_the_same_note() {
+        for length in [0.08, 0.33, 0.6, 1.0] {
+            for fret in 0..5 {
+                assert_eq!(frequency(C, length, fret), frequency(C, length, fret));
+            }
+        }
+    }
+
+    #[test]
+    fn a_string_is_split_into_five_equal_frets() {
+        let frets: Vec<usize> = [0.0, 0.19, 0.2, 0.5, 0.79, 0.8, 0.99]
+            .into_iter()
+            .map(fret_at)
+            .collect();
+        assert_eq!(frets, [0, 0, 1, 2, 3, 4, 4]);
+    }
+
+    #[test]
+    fn a_position_at_or_past_either_end_is_in_the_end_fret() {
+        assert_eq!(fret_at(-0.1), 0);
+        assert_eq!(fret_at(1.0), 4);
+        assert_eq!(fret_at(1.2), 4);
     }
 
     #[test]
