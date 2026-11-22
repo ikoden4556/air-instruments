@@ -130,7 +130,7 @@ air-instruments/
 
 ### Deferred latency fixes (phase 8)
 Measured or estimated in the phase 2 spike; tried later, in this order:
-1. **Smarter prediction:** smooth over 4–5 frames and allow a longer lookahead (80–100 ms) without more FALSE Plucks. Est. 20–30 ms felt.
+1. **Smarter prediction:** smooth over 4–5 frames and allow a longer lookahead (80–100 ms) without more FALSE Plucks. Est. 20–30 ms felt. **Done in #44:** tuned on recorded traces; what worked was predicting slower Pluckers (from 0.3 widths/s) and confirming each crossing over 2 frames, with a 120 ms lookahead. Fitting acceleration or over more frames did worse. FELT avg 128 → 107 ms on the Oppo, FALSE Plucks no higher.
 2. **Fixed exposure in good light:** 8 ms exposure cut the camera delay ~53 → ~44 ms; needs a fallback to auto in dim rooms. Est. 5–10 ms.
 3. **No frame copy:** feed the camera buffer to MediaPipe directly (copy costs ~5 ms at 60 fps). Est. 3–5 ms.
 4. **Lighter hand model:** only fingertips are needed. Est. 5–10 ms.
