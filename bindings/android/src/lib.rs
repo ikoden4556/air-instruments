@@ -151,6 +151,20 @@ pub unsafe extern "system" fn Java_com_airinstruments_Native_engineFalsePlucks(
     unsafe { (*(e as *const FlatEngine)).engine.false_plucks() as jint }
 }
 
+/// How far ahead Plucks are predicted, ns; 0 waits for every real crossing.
+///
+/// # Safety
+/// `e` must come from `engineNew`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Java_com_airinstruments_Native_engineSetLookahead(
+    _: *mut JNIEnv,
+    _: jclass,
+    e: jlong,
+    lookahead_ns: jlong,
+) {
+    unsafe { (*(e as *mut FlatEngine)).engine.set_lookahead(lookahead_ns.max(0) as u64) }
+}
+
 /// Starts the audio stream (once). Returns packed info (bit 0 exclusive, bit 1 low latency,
 /// bits 8.. frames per burst) or a negative error; -100 off Android.
 #[unsafe(no_mangle)]

@@ -23,6 +23,9 @@ object Native {
     @JvmStatic external fun engineClear(engine: Long)
     @JvmStatic external fun engineSetKey(engine: Long, keyRoot: Int)
 
+    /** How far ahead Plucks are predicted; 0 waits for every real crossing. */
+    @JvmStatic external fun engineSetLookahead(engine: Long, lookaheadNs: Long)
+
     /** Predicted Plucks whose String was never crossed in time, so far. */
     @JvmStatic external fun engineFalsePlucks(engine: Long): Int
 

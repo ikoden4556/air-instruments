@@ -5,16 +5,21 @@ use crate::crossing::{Crossing, JITTER_NS, Pluck, crossing_point};
 use crate::frame::Landmark;
 use crate::strings::Segment;
 
-/// The lookahead the phase 2 spike measured best at 60 fps.
-pub const DEFAULT_LOOKAHEAD_NS: u64 = 60_000_000;
+/// Tuned on a recorded trace (#44): with `CONFIRM`, as few FALSE Plucks as the old
+/// 60 ms lookahead without it, and Plucks fire about 30 ms before the crossing on average.
+pub const DEFAULT_LOOKAHEAD_NS: u64 = 120_000_000;
 
 /// Frames of each Plucker's path the velocity is fitted over; fewer than
-/// `MIN_HISTORY` and the Plucker is not predicted.
-const HISTORY: usize = 5;
+/// `MIN_HISTORY` and the Plucker is not predicted. Short, so it follows a speeding-up
+/// finger; `CONFIRM` rides out the jitter that lets through.
+const HISTORY: usize = 3;
 const MIN_HISTORY: usize = 3;
 
+/// A crossing must be predicted on this many frames in a row before it Plucks.
+const CONFIRM: u32 = 2;
+
 /// Pluckers slower than this, in screen widths per second, are left to the real crossing.
-const MIN_SPEED: f32 = 1.0;
+const MIN_SPEED: f32 = 0.3;
 
 /// A predicted Pluck whose String is not crossed this soon after was FALSE.
 const FALSE_AFTER_NS: u64 = 250_000_000;
@@ -32,6 +37,8 @@ pub struct Prediction {
     /// When each String last Plucked or was really crossed, for S5.
     recent: Vec<(Segment, u64)>,
     false_plucks: u32,
+    /// Per Plucker: Strings predicted to be crossed, and on how many frames in a row.
+    streak: [Vec<(Segment, u32)>; 2],
 }
 
 impl Prediction {
@@ -45,7 +52,13 @@ impl Prediction {
             pending: Vec::new(),
             recent: Vec::new(),
             false_plucks: 0,
+            streak: Default::default(),
         }
+    }
+
+    /// How far ahead to predict; 0 waits for every real crossing.
+    pub fn set_lookahead(&mut self, lookahead_ns: u64) {
+        self.lookahead_ns = lookahead_ns;
     }
 
     /// Predicted Plucks whose String was never crossed in time, so far.
@@ -77,6 +90,7 @@ impl Prediction {
             .retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
         self.false_plucks += (before - self.pending.len()) as u32;
         for (i, (history, plucker)) in self.history.iter_mut().zip(pluckers).enumerate() {
+            let previous = std::mem::take(&mut self.streak[i]);
             let Some(at) = plucker else {
                 history.clear();
                 continue;
@@ -109,6 +123,11 @@ impl Prediction {
                 // Braking to a stop short of the String: a near miss, not a Pluck.
                 let to_string = u * (to.x - at.x).hypot((to.y - at.y) * self.aspect);
                 if stops_within.is_some_and(|d| d < to_string) {
+                    continue;
+                }
+                let run = 1 + previous.iter().find(|(p, _)| p == s).map_or(0, |&(_, n)| n);
+                self.streak[i].push((*s, run));
+                if run < CONFIRM {
                     continue;
                 }
                 let crosses_ns =
@@ -166,7 +185,10 @@ fn stopping_distance(history: &[(u64, Landmark)], aspect: f32, dir: (f32, f32)) 
     }
     // Times relative to the newest frame, so the fit's velocity is the current one.
     let now = history[history.len() - 1].0;
-    let ts: Vec<f64> = history.iter().map(|&(t, _)| -((now - t) as f64) / 1e9).collect();
+    let ts: Vec<f64> = history
+        .iter()
+        .map(|&(t, _)| -((now - t) as f64) / 1e9)
+        .collect();
     // Least squares for p(t) = c + v t + a t²/2: normal equations, solved by Cramer's rule.
     let basis = |t: f64| [1.0, t, t * t / 2.0];
     let mut m = [[0.0f64; 3]; 3];
@@ -306,16 +328,28 @@ mod tests {
     }
 
     #[test]
+    fn a_one_frame_tracking_spike_toward_a_string_does_not_pluck() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        let ys = [0.3, 0.3, 0.3, 0.3, 0.45, 0.3, 0.3, 0.3];
+        let mut plucks = Vec::new();
+        for (i, &y) in ys.iter().enumerate() {
+            plucks.extend(pr.update(i as u64 * FRAME, [p(0.5, y), None], &strings));
+        }
+        assert!(plucks.is_empty(), "{plucks:?}");
+    }
+
+    #[test]
     fn a_slow_approach_plucks_only_on_the_real_crossing() {
         let strings = [across(0.5)];
         let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
-        // 0.5 widths/s from 0.45: crosses at 100 ms, between frames 6 (96 ms) and 7 (112 ms).
-        let frames = approach(&mut pr, &strings, 0.45, 0.5, 10);
+        // 0.2 widths/s from 0.45: crosses at 250 ms, between frames 15 (240 ms) and 16 (256 ms).
+        let frames = approach(&mut pr, &strings, 0.45, 0.2, 20);
         for (i, f) in frames.iter().enumerate() {
-            assert_eq!(f.len(), usize::from(i == 7), "frame {i}: {frames:?}");
+            assert_eq!(f.len(), usize::from(i == 16), "frame {i}: {frames:?}");
         }
         assert!(
-            (frames[7][0].timestamp_ns as f64 / 1e6 - 100.0).abs() < 1.0,
+            (frames[16][0].timestamp_ns as f64 / 1e6 - 250.0).abs() < 1.0,
             "{frames:?}"
         );
     }
@@ -354,9 +388,10 @@ mod tests {
     #[test]
     fn the_lookahead_sets_how_early_a_pluck_fires() {
         let strings = [across(0.5)];
-        // The fast approach crosses at 75 ms. The first frame with 3 frames of path
-        // is 2 (32 ms); with a 20 ms lookahead it waits for frame 4 (64 ms).
-        for (lookahead, frame) in [(DEFAULT_LOOKAHEAD_NS, 2), (20 * MS, 4)] {
+        // The fast approach crosses at 75 ms. The first frame with 3 frames of path is
+        // 2 (32 ms), confirmed on frame 3 (48 ms). With a 40 ms lookahead it is first
+        // predicted on frame 3 (27 ms ahead), confirmed on frame 4 (64 ms).
+        for (lookahead, frame) in [(DEFAULT_LOOKAHEAD_NS, 3), (40 * MS, 4)] {
             let mut pr = Prediction::new(1.0, lookahead);
             let frames = approach(&mut pr, &strings, 0.2, 4.0, 8);
             let fired: Vec<_> = (0..8).filter(|&i| !frames[i].is_empty()).collect();
