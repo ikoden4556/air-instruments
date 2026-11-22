@@ -75,3 +75,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] The front camera really runs at 60 fps (`setTargetFrameRate(60, 60)`; falls back to the default rate if the phone refuses).
 - [ ] The debug drawing sits on your fingers (preview and analysis both 4:3, FILL_CENTER crop) and left/right are your own hands.
 - [ ] Pinch, Freeze and Pluck work end to end and Plucks sound.
+
+## Android drawing (#35)
+- [ ] The GL layer shows over the camera preview (translucent media-overlay SurfaceView above the preview SurfaceView) and lines up with your fingers.
+- [ ] Strings glow with Fret ticks, vibrate and spark on Pluck, like the web version.
+- [ ] Drawing doesn't lower the hand-tracking rate (GPU shared with MediaPipe; it redraws only per camera result).
