@@ -74,6 +74,11 @@ impl Strings {
     pub fn undo(&mut self) {
         self.strings.pop();
     }
+
+    /// Removes every String.
+    pub fn clear(&mut self) {
+        self.strings.clear();
+    }
 }
 
 /// The most Strings at once; Freezing another removes the oldest.
@@ -211,5 +216,18 @@ mod tests {
         s.undo();
         s.undo(); // nothing left: no effect
         assert!(s.strings().is_empty());
+    }
+
+    #[test]
+    fn clear_removes_every_string() {
+        let mut s = Strings::new(1.0);
+        for n in 0..5 {
+            freeze_nth(&mut s, n);
+        }
+        s.clear();
+        assert!(s.strings().is_empty());
+        // New Strings can be made afterwards.
+        freeze_nth(&mut s, 5);
+        assert_eq!(heights(&s), [5]);
     }
 }
