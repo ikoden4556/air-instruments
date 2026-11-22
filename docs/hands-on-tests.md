@@ -8,7 +8,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Fingertips look steady when a Hand is still, and keep up with a fast swipe (no visible lag). Oppo 2026-11-22 (Android, 60 fps): **steady, but lags behind a fast swipe** (overall ~100 ms capture→result, plus the filter).
 
 ## Pinch (#2)
-- [ ] Pinching starts and stops when you expect, for a near Hand and a far Hand. Oppo 2026-11-22: starts quickly; **on letting go, sometimes a delay before the String is built (Freezes).**
+- [x] Pinching starts and stops when you expect, for a near Hand and a far Hand. Oppo 2026-11-22: letting go sometimes Froze late (filter lag on slow releases); **fixed: Pinch on/off from raw landmarks**. Release now immediate, half-open Pinch still steady.
 - [x] A half-open Pinch doesn't flicker on and off. (2026-11-22: holds steady)
 
 ## Strings (#3)
@@ -64,7 +64,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 ## Deploy and offline (#10)
 - [x] The public URL (https://ikoden4556.github.io/air-instruments/) plays on the Oppo (2026-11-22, Chrome): tracking, Strings, sparks, sound, no extra notes heard. **Clearly slower than the native app** (not measured: the web app has no latency readout yet). Page stayed portrait because the phone's auto-rotate was off; the Player says that's a phone setting, not an app problem.
 - [ ] The public URL plays on the iPhone.
-- [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right. Oppo 2026-11-22: installs, opens fullscreen landscape. **First open reported "completely black, camera did not load"; not reproduced** — on the second open (watched over Chrome remote debugging) Tap to start → camera 640x480, MediaPipe GPU running, no errors in 2 min. Player: "Tap to start" was visible on the black screen (so the page loaded; black + button is the normal start screen). **Bug: tapping it left the screen black** (first open only; second open worked). Cause unknown — fix after testing. **Small bug: a black strip on the left edge** (front-camera cutout; needs `viewport-fit=cover`).
+- [ ] Install as an app (Chrome "Install app"; Safari Share → Add to Home Screen); the icon and fullscreen landscape look right. Oppo 2026-11-22: installs, opens fullscreen landscape. **First open reported "completely black, camera did not load"; not reproduced** — on the second open (watched over Chrome remote debugging) Tap to start → camera 640x480, MediaPipe GPU running, no errors in 2 min. Player: "Tap to start" was visible on the black screen (so the page loaded; black + button is the normal start screen). **Bug: tapping it left the screen black** (first open only; second open worked). Cause unknown — fix after testing. **Small bug: a black strip on the left edge** (front-camera cutout; `viewport-fit=cover` added, check once deployed). Startup steps now shown big and centered, to see where a first open stalls if it happens again.
 - [x] Offline: open it with no internet at all and it starts and tracks hands. Oppo 2026-11-22: works with airplane mode on and Wi-Fi off.
 
 ## Android audio (#33)
