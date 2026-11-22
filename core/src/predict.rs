@@ -13,6 +13,9 @@ pub const DEFAULT_LOOKAHEAD_NS: u64 = 60_000_000;
 const HISTORY: usize = 4;
 const MIN_HISTORY: usize = 3;
 
+/// Pluckers slower than this, in screen widths per second, are left to the real crossing.
+const MIN_SPEED: f32 = 1.0;
+
 /// A predicted Pluck whose String is not crossed this soon after was FALSE.
 const FALSE_AFTER_NS: u64 = 250_000_000;
 
@@ -78,6 +81,9 @@ impl Prediction {
             let ahead = self.lookahead_ns as f32 / 1e9;
             let to = Landmark { x: at.x + vx * ahead, y: at.y + vy * ahead };
             let velocity = vx.hypot(vy * self.aspect);
+            if velocity < MIN_SPEED {
+                continue;
+            }
             for (string, s) in strings.iter().enumerate() {
                 if self.pending.iter().any(|(p, _)| p == s) {
                     continue;
@@ -132,7 +138,13 @@ mod tests {
 
     /// Feeds one Plucker moving straight down from `y0` at `speed` screen widths
     /// per second, one frame at a time, and returns each frame's Plucks.
-    fn approach(pr: &mut Prediction, strings: &[Segment], y0: f32, speed: f32, frames: u64) -> Vec<Vec<Pluck>> {
+    fn approach(
+        pr: &mut Prediction,
+        strings: &[Segment],
+        y0: f32,
+        speed: f32,
+        frames: u64,
+    ) -> Vec<Vec<Pluck>> {
         (0..frames)
             .map(|i| {
                 let t = i * FRAME;
@@ -179,5 +191,43 @@ mod tests {
         }
         assert_eq!(plucks.len(), 1, "{plucks:?}");
         assert_eq!(pr.false_plucks(), 1);
+    }
+
+    #[test]
+    fn a_slow_approach_plucks_only_on_the_real_crossing() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // 0.5 widths/s from 0.45: crosses at 100 ms, between frames 6 (96 ms) and 7 (112 ms).
+        let frames = approach(&mut pr, &strings, 0.45, 0.5, 10);
+        for (i, f) in frames.iter().enumerate() {
+            assert_eq!(f.len(), usize::from(i == 7), "frame {i}: {frames:?}");
+        }
+        assert!((frames[7][0].timestamp_ns as f64 / 1e6 - 100.0).abs() < 1.0, "{frames:?}");
+    }
+
+    #[test]
+    fn the_lookahead_sets_how_early_a_pluck_fires() {
+        let strings = [across(0.5)];
+        // The fast approach crosses at 75 ms. The first frame with 3 frames of path
+        // is 2 (32 ms); with a 20 ms lookahead it waits for frame 4 (64 ms).
+        for (lookahead, frame) in [(DEFAULT_LOOKAHEAD_NS, 2), (20 * MS, 4)] {
+            let mut pr = Prediction::new(1.0, lookahead);
+            let frames = approach(&mut pr, &strings, 0.2, 4.0, 8);
+            let fired: Vec<_> = (0..8).filter(|&i| !frames[i].is_empty()).collect();
+            assert_eq!(fired, [frame], "lookahead {lookahead}: {frames:?}");
+        }
+    }
+
+    #[test]
+    fn velocity_is_fitted_over_several_frames_not_the_last_two() {
+        // 4 screen widths/s down, with 0.01 of jitter on the newest frame.
+        let ys = [0.0, 0.064, 0.128, 0.202];
+        let history: Vec<_> =
+            ys.iter().enumerate().map(|(i, &y)| (i as u64 * FRAME, Landmark { x: 0.5, y })).collect();
+        let (vx, vy) = fitted_velocity(&history).unwrap();
+        // The last two frames alone would say 4.625; the fit, worked by hand, says 4.1875.
+        assert!(vx.abs() < 1e-4);
+        assert!((vy - 4.1875).abs() < 1e-3, "{vy}");
+        assert_eq!(fitted_velocity(&history[..2]), None, "two frames are not enough");
     }
 }
