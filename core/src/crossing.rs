@@ -140,4 +140,39 @@ mod tests {
         // Back up, crossing at 108 ms, 100 ms after the first Pluck: a second Pluck.
         assert_eq!(micros(&c.update(116 * MS, [p(0.5, 0.4), None], &strings)), [108_000]);
     }
+
+    #[test]
+    fn s6_passing_through_where_two_strings_cross_plucks_both() {
+        let x = |a: (f32, f32), b: (f32, f32)| Segment {
+            left: Landmark { x: a.0, y: a.1 },
+            right: Landmark { x: b.0, y: b.1 },
+        };
+        // An X: both Strings meet at (0.5, 0.5).
+        let strings = [x((0.2, 0.2), (0.8, 0.8)), x((0.2, 0.8), (0.8, 0.2))];
+        let mut c = Crossing::new(1.0);
+        c.update(0, [None, p(0.5, 0.3)], &strings);
+        let plucks = c.update(20 * MS, [None, p(0.5, 0.7)], &strings);
+        let mut hit: Vec<_> = plucks.iter().map(|pl| pl.string).collect();
+        hit.sort();
+        assert_eq!(hit, [0, 1]);
+        assert_eq!(micros(&plucks), [10_000, 10_000]);
+    }
+
+    #[test]
+    fn s7_a_stretch_sweeping_across_a_string_plucks_nothing() {
+        use crate::strings::{HandState::Open, HandState::Pinching, Strings};
+        let at = |x: f32, y: f32| Pinching(Landmark { x, y });
+        let mut s = Strings::new(1.0);
+        let mut c = Crossing::new(1.0);
+        // Freeze a String at height 0.5.
+        s.update(0, at(0.2, 0.5), at(0.8, 0.5));
+        s.update(16 * MS, Open, at(0.8, 0.5));
+        // A new Stretch sweeps down across it. Both Hands Pinch, so neither is a Plucker.
+        for (i, y) in [0.3, 0.45, 0.55, 0.7].into_iter().enumerate() {
+            let t = (100 + 16 * i as u64) * MS;
+            s.update(t, at(0.1, y), at(0.9, y));
+            assert!(s.stretch().is_some());
+            assert!(c.update(t, [None, None], s.strings()).is_empty());
+        }
+    }
 }
