@@ -13,6 +13,9 @@ pub const DEFAULT_LOOKAHEAD_NS: u64 = 60_000_000;
 const HISTORY: usize = 4;
 const MIN_HISTORY: usize = 3;
 
+/// A predicted Pluck whose String is not crossed this soon after was FALSE.
+const FALSE_AFTER_NS: u64 = 250_000_000;
+
 /// Wraps `Crossing`: Plucks early on fast approaches, and on the real crossing otherwise.
 #[derive(Debug, Clone)]
 pub struct Prediction {
@@ -23,6 +26,7 @@ pub struct Prediction {
     history: [Vec<(u64, Landmark)>; 2],
     /// Strings Plucked by prediction and not yet really crossed, with when they fired.
     pending: Vec<(Segment, u64)>,
+    false_plucks: u32,
 }
 
 impl Prediction {
@@ -34,7 +38,13 @@ impl Prediction {
             lookahead_ns,
             history: Default::default(),
             pending: Vec::new(),
+            false_plucks: 0,
         }
+    }
+
+    /// Predicted Plucks whose String was never crossed in time, so far.
+    pub fn false_plucks(&self) -> u32 {
+        self.false_plucks
     }
 
     /// Same as `Crossing::update`, but a Pluck may come before its crossing:
@@ -46,6 +56,15 @@ impl Prediction {
         strings: &[Segment],
     ) -> Vec<Pluck> {
         let mut plucks = self.crossing.update(timestamp_ns, pluckers, strings);
+        // A real crossing of a String already Plucked by prediction is that Pluck.
+        plucks.retain(|pl| {
+            let s = strings[pl.string];
+            let predicted = self.pending.iter().position(|(p, _)| *p == s);
+            predicted.map(|i| self.pending.remove(i)).is_none()
+        });
+        let before = self.pending.len();
+        self.pending.retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
+        self.false_plucks += (before - self.pending.len()) as u32;
         for (history, plucker) in self.history.iter_mut().zip(pluckers) {
             let Some(at) = plucker else {
                 history.clear();
@@ -133,5 +152,32 @@ mod tests {
         assert_eq!(plucks[0].string, 0);
         assert!((plucks[0].timestamp_ns as f64 / 1e6 - 75.0).abs() < 1.0, "{plucks:?}");
         assert!((plucks[0].velocity - 4.0).abs() < 1e-3, "{plucks:?}");
+    }
+
+    #[test]
+    fn the_real_crossing_after_a_predicted_pluck_does_not_pluck_again() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // Same approach, carried on past the String (crossed between frames 4 and 5).
+        let frames = approach(&mut pr, &strings, 0.2, 4.0, 8);
+        assert_eq!(frames.concat().len(), 1, "{frames:?}");
+        assert_eq!(pr.false_plucks(), 0);
+    }
+
+    #[test]
+    fn a_near_miss_that_stops_short_is_a_false_pluck() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        let mut plucks = approach(&mut pr, &strings, 0.2, 4.0, 4).concat();
+        // Stops dead at 0.48, just short of the String, from frame 4 on.
+        for i in 4..20 {
+            plucks.extend(pr.update(i * FRAME, [p(0.5, 0.48), None], &strings));
+            // Still within 250 ms of the prediction: not yet known to be FALSE.
+            if i * FRAME < 32 * MS + 250 * MS {
+                assert_eq!(pr.false_plucks(), 0, "frame {i}");
+            }
+        }
+        assert_eq!(plucks.len(), 1, "{plucks:?}");
+        assert_eq!(pr.false_plucks(), 1);
     }
 }
