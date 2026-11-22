@@ -53,6 +53,18 @@ class MainActivity : ComponentActivity() {
 
     private var realtimeClock: Boolean? = null
     private val prevX = HashMap<String, Float>()
+    private val prevT = HashMap<String, Long>()
+    private val predictedAt = HashMap<String, Long>() // capture time of a predicted Pluck awaiting its real crossing
+    private val lookaheadMs by lazy { intent.getIntExtra("look", 40) }
+    @Volatile private var pendingRef = -1L // camera-timeline time the finger really crossed, for the last Pluck
+    private var lastPresented = -1L
+    private val felt = ArrayDeque<Double>()
+    private val feltPredicted = ArrayDeque<Double>()
+    private val feltFallback = ArrayDeque<Double>()
+    @Volatile private var pendingPredicted = false
+    @Volatile private var predictedHits = 0
+    @Volatile private var fallbackPlucks = 0
+    @Volatile private var falsePlucks = 0
     @Volatile private var lastPluckNs = 0L
     @Volatile private var frames = 0
     @Volatile private var plucks = 0
@@ -67,6 +79,9 @@ class MainActivity : ComponentActivity() {
     private val audioOut = ArrayDeque<Double>()
     private val submitted = java.util.concurrent.ConcurrentHashMap<Long, Long>()
     @Volatile private var results = 0
+    private var ticks = 0
+    private var fps = 0
+    private var rps = 0
     private var lastSpeaker = -1.0
     private var reuse: android.graphics.Bitmap? = null
 
@@ -106,7 +121,7 @@ class MainActivity : ComponentActivity() {
         else registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) startCamera() }
             .launch(Manifest.permission.CAMERA)
 
-        ui.post(object : Runnable { override fun run() { render(); ui.postDelayed(this, 500) } })
+        ui.post(object : Runnable { override fun run() { render(); ui.postDelayed(this, 100) } })
     }
 
     private fun startCamera() {
@@ -186,14 +201,32 @@ class MainActivity : ComponentActivity() {
             val x = lm[8].x()
             dots += PointF(1 - x, lm[8].y()) // front camera preview is mirrored
             val p = prevX[hand]
-            if (p != null && (p - 0.5f) * (x - 0.5f) < 0 && now - lastPluckNs > 60_000_000) {
-                lastPluckNs = now
-                plucks++
-                Native.pluck(captureNs)
+            val pt = prevT[hand]
+            val pred = predictedAt[hand]
+            if (pred != null && captureNs - pred > 250_000_000) { predictedAt.remove(hand); falsePlucks++ } // never crossed
+            if (p != null && pt != null && captureNs > pt) {
+                val v = (x - p) / (captureNs - pt) // screen widths per ns
+                if ((p - 0.5f) * (x - 0.5f) < 0) {
+                    // real crossing: interpolate when it happened on the camera timeline
+                    val tc = pt + ((0.5f - p) / (x - p) * (captureNs - pt)).toLong()
+                    if (predictedAt.remove(hand) != null) { predictedHits++; pendingPredicted = true; pendingRef = tc }
+                    else if (now - lastPluckNs > 60_000_000) {
+                        lastPluckNs = now; plucks++; fallbackPlucks++
+                        Native.pluck(captureNs); pendingPredicted = false; pendingRef = tc
+                    }
+                } else if (pred == null && lookaheadMs > 0 && abs(v) * 1e9 > 0.5 && (0.5f - x) / v > 0 &&
+                    (0.5f - x) / v <= lookaheadMs * 1e6 && now - lastPluckNs > 60_000_000) {
+                    // moving fast toward the String and will cross within the lookahead: Pluck now
+                    lastPluckNs = now; plucks++
+                    predictedAt[hand] = captureNs
+                    Native.pluck(captureNs)
+                }
             }
             prevX[hand] = x
+            prevT[hand] = captureNs
         }
-        prevX.keys.retainAll(seen)
+        prevX.keys.retainAll(seen); prevT.keys.retainAll(seen)
+        predictedAt.keys.filter { it !in seen }.forEach { predictedAt.remove(it); falsePlucks++ }
         overlay.dots = dots
         overlay.postInvalidate()
     }
@@ -205,8 +238,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun render() {
-        val fps = frames * 2; frames = 0
-        val rps = results * 2; results = 0
+        if (++ticks % 5 == 0) { fps = frames * 2; frames = 0; rps = results * 2; results = 0 }
         if (submitted.size > 100) submitted.clear() // dropped frames never get a result
         if (plucks != readPlucks) {
             readPlucks = plucks
@@ -214,6 +246,13 @@ class MainActivity : ComponentActivity() {
             if (lastSpeaker > 0) add(captureToSpeaker, lastSpeaker)
         }
         Native.outputLatencyMs(System.nanoTime()).let { if (it > 0) add(audioOut, it) }
+        // felt latency = when the beep hit the speaker minus when the finger really crossed (negative = early)
+        val presented = Native.beepPresentedNs()
+        val ref = pendingRef
+        if (ref > 0 && presented > 0 && presented != lastPresented) {
+            val ms = (presented - ref) / 1e6
+            add(felt, ms); add(if (pendingPredicted) feltPredicted else feltFallback, ms); lastPresented = presented; pendingRef = -1
+        }
         val i = Native.info()
         hud.text = """
 PROTOTYPE latency spike (native)  ${android.os.Build.MODEL}
@@ -226,7 +265,11 @@ capture->result ${stat(captureToResult)}
 audio out       ${stat(audioOut)}
 capture->SPEAKER ${stat(captureToSpeaker)}  last ${"%.0f".format(lastSpeaker)} ms
 audio           start=$audioStart exclusive=${i and 1 == 1} lowlatency=${i shr 1 and 1 == 1} burst=${i shr 8} buffer=${Native.bufferFrames()}
-plucks          $plucks
+plucks          $plucks  (predicted+crossed $predictedHits, late fallback $fallbackPlucks, FALSE $falsePlucks)
+lookahead       $lookaheadMs ms
+FELT latency    ${stat(felt)}  min ${synchronized(felt) { felt.minOrNull()?.let { "%.0f".format(it) } ?: "-" }} ms
+  predicted     ${stat(feltPredicted)}  min ${synchronized(feltPredicted) { feltPredicted.minOrNull()?.let { "%.0f".format(it) } ?: "-" }} ms
+  late fallback ${stat(feltFallback)}
 Swipe an index fingertip across the cyan line.""".trim()
     }
 

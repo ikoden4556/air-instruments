@@ -9,5 +9,6 @@ object Native {
     @JvmStatic external fun lastCaptureToSpeakerMs(): Double
     @JvmStatic external fun outputLatencyMs(nowNs: Long): Double
     @JvmStatic external fun bufferFrames(): Int
+    @JvmStatic external fun beepPresentedNs(): Long
     @JvmStatic external fun info(): Int
 }

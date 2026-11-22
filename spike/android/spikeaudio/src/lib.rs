@@ -80,6 +80,17 @@ pub extern "system" fn Java_com_airinstruments_spike_Native_lastCaptureToSpeaker
     (presented_ns - BEEP_CAPTURE_NS.load(Acquire)) as f64 / 1e6
 }
 
+/// Absolute CLOCK_MONOTONIC time (ns) the last beep's first frame reaches the speaker, or -1.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_airinstruments_spike_Native_beepPresentedNs(_: Env, _: Class) -> i64 {
+    let (Some(s), first) = (stream(), BEEP_FIRST_FRAME.load(Acquire)) else { return -1 };
+    if first < 0 {
+        return -1;
+    }
+    let Ok(ts) = s.timestamp(Clockid::Monotonic) else { return -1 };
+    ts.time_nanoseconds + (first - ts.frame_position) * 1_000_000_000 / s.sample_rate() as i64
+}
+
 /// Audio-only latency in ms: a frame written now reaches the speaker this far in the future.
 /// `now_ns` is System.nanoTime() (CLOCK_MONOTONIC) at the call.
 #[unsafe(no_mangle)]

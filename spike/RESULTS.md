@@ -56,3 +56,19 @@ Verdict:
 - Frame copy is ~1 ms: not worth optimising. Inference is ~23 ms on GPU.
 - Audio: 1-burst buffer saves ~6 ms (29 ms). Exclusive/MMAP is refused for third-party apps on this phone.
 - Floor on the Oppo ~ 50 camera + 24 inference + 29 audio ~ 105 ms. The 60 ms target is not reachable by tuning; only prediction (triggering a Pluck from the fingertip's velocity before it crosses) can hide the rest.
+
+### Prediction (Pluck fired early when the fingertip will cross within the lookahead)
+
+"Felt" = speaker time of the beep minus the interpolated moment the fingertip really crossed (camera timeline). Front camera, 30 fps, lights on, ~15 swipes + ~5 deliberate near-misses per run.
+
+| Lookahead | Plucks | Predicted + crossed | Late fallback | FALSE | Felt avg / p95 (all) | Felt predicted avg / p95 / min | Felt fallback avg / p95 |
+|---|---|---|---|---|---|---|---|
+| 40 ms | 20 | 13 | 4 | 3 | 98 / 157 ms (min -56) | not split | not split |
+| 80 ms | 33 | 18 | 11 | 4 | 105 / 163 ms | 87 / 139 / 55 ms | 138 / 165 ms |
+
+Verdict:
+- Prediction works: predicted Plucks land ~50 ms sooner than late ones (87 vs 138 ms felt).
+- Cost: ~12% FALSE Plucks (mostly the deliberate near-misses), and ~1/3 of swipes still miss prediction (too slow, or only one frame before the crossing at 30 fps).
+- Naive two-frame linear velocity is noisy; the core should smooth (e.g. One Euro filter) and use more frames.
+- Realistic on the Oppo: ~85-90 ms felt for fast strums, ~105-140 ms for slow ones. 60 ms is not reachable on this hardware.
+- Odd: the 80 ms run reported buffer=512 although 1 burst was requested; not investigated.
