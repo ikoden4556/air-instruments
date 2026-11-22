@@ -14,8 +14,12 @@ pub struct LandmarkFilter {
 
 impl LandmarkFilter {
     pub fn new(settings: OneEuroSettings) -> Self {
-        let hand = || std::array::from_fn(|_| std::array::from_fn(|_| OneEuroFilter::new(settings)));
-        Self { left: hand(), right: hand() }
+        let hand =
+            || std::array::from_fn(|_| std::array::from_fn(|_| OneEuroFilter::new(settings)));
+        Self {
+            left: hand(),
+            right: hand(),
+        }
     }
 
     /// Returns the frame with every landmark smoothed.
@@ -55,7 +59,10 @@ pub struct OneEuroFilter {
 
 impl OneEuroFilter {
     pub fn new(settings: OneEuroSettings) -> Self {
-        Self { settings, last: None }
+        Self {
+            settings,
+            last: None,
+        }
     }
 
     /// Feeds one sample taken at `timestamp_ns` and returns the filtered value.
@@ -97,12 +104,18 @@ mod tests {
     const MS: u64 = 1_000_000;
 
     fn settings() -> OneEuroSettings {
-        OneEuroSettings { min_cutoff: 1.0, beta: 10.0, derivative_cutoff: 1.0 }
+        OneEuroSettings {
+            min_cutoff: 1.0,
+            beta: 10.0,
+            derivative_cutoff: 1.0,
+        }
     }
 
     /// Repeatable noise in -1..1.
     fn noise(i: u64) -> f32 {
-        let h = i.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let h = i
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((h >> 40) as f32 / (1u64 << 24) as f32) * 2.0 - 1.0
     }
 
@@ -137,7 +150,10 @@ mod tests {
 
     /// Filters a step from 0 to 1 at the given frame gaps; returns the output at 99 ms.
     fn step_response_at_99_ms(gaps_ms: &[u64]) -> f32 {
-        let still = OneEuroSettings { beta: 0.0, ..settings() };
+        let still = OneEuroSettings {
+            beta: 0.0,
+            ..settings()
+        };
         let mut f = OneEuroFilter::new(still);
         f.filter(0, 0.0);
         let mut t = 0;
@@ -163,7 +179,10 @@ mod tests {
     }
 
     fn hand(handedness: Handedness, at: f32) -> Hand {
-        Hand { handedness, landmarks: [Landmark { x: at, y: at }; LANDMARKS_PER_HAND] }
+        Hand {
+            handedness,
+            landmarks: [Landmark { x: at, y: at }; LANDMARKS_PER_HAND],
+        }
     }
 
     #[test]
