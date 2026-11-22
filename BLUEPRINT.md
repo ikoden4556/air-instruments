@@ -37,6 +37,7 @@ Status: **phases 0 (setup), 1 (domain model) and 2 (latency spike) done.** Vocab
 | S6 | Plucker passes through two crossing Strings | Both Pluck |
 | S7 | A Stretch sweeps across an existing String | No Pluck |
 | S8 | Both Pluckers cross one String in the same frame | One Pluck, at the faster Plucker's Velocity |
+| S9 | A Plucker hovers on a String it just Plucked, or appears on one (letting go of a Stretch) | It can't Pluck that String until it has been 4% of screen width away from it |
 
 ### Latency targets (motion → sound)
 

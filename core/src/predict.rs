@@ -10,7 +10,7 @@ pub const DEFAULT_LOOKAHEAD_NS: u64 = 60_000_000;
 
 /// Frames of each Plucker's path the velocity is fitted over; fewer than
 /// `MIN_HISTORY` and the Plucker is not predicted.
-const HISTORY: usize = 4;
+const HISTORY: usize = 5;
 const MIN_HISTORY: usize = 3;
 
 /// Pluckers slower than this, in screen widths per second, are left to the real crossing.
@@ -76,7 +76,7 @@ impl Prediction {
         self.pending
             .retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
         self.false_plucks += (before - self.pending.len()) as u32;
-        for (history, plucker) in self.history.iter_mut().zip(pluckers) {
+        for (i, (history, plucker)) in self.history.iter_mut().zip(pluckers).enumerate() {
             let Some(at) = plucker else {
                 history.clear();
                 continue;
@@ -97,13 +97,20 @@ impl Prediction {
             if velocity < MIN_SPEED {
                 continue;
             }
+            // How far it can still go if it keeps braking as now (screen widths).
+            let stops_within = stopping_distance(history, self.aspect, (vx, vy));
             for (string, s) in strings.iter().enumerate() {
-                if self.pending.iter().any(|(p, _)| p == s) {
+                if self.pending.iter().any(|(p, _)| p == s) || !self.crossing.armed(i, s) {
                     continue;
                 }
                 let Some((u, along)) = crossing_point(at, to, s) else {
                     continue;
                 };
+                // Braking to a stop short of the String: a near miss, not a Pluck.
+                let to_string = u * (to.x - at.x).hypot((to.y - at.y) * self.aspect);
+                if stops_within.is_some_and(|d| d < to_string) {
+                    continue;
+                }
                 let crosses_ns =
                     timestamp_ns + (self.lookahead_ns as f64 * u as f64).round() as u64;
                 let jitter = self
@@ -148,6 +155,57 @@ fn fitted_velocity(history: &[(u64, Landmark)]) -> Option<(f32, f32)> {
         sy += dt * (p.y as f64 - mean_y);
     }
     (sxx > 0.0).then(|| ((sx / sxx) as f32, (sy / sxx) as f32))
+}
+
+/// If the Plucker is braking along `dir` (its fitted velocity), how far (screen widths)
+/// it goes before it stops, from a quadratic fit (position, velocity, acceleration)
+/// through its last positions.
+fn stopping_distance(history: &[(u64, Landmark)], aspect: f32, dir: (f32, f32)) -> Option<f32> {
+    if history.len() < MIN_HISTORY {
+        return None;
+    }
+    // Times relative to the newest frame, so the fit's velocity is the current one.
+    let now = history[history.len() - 1].0;
+    let ts: Vec<f64> = history.iter().map(|&(t, _)| -((now - t) as f64) / 1e9).collect();
+    // Least squares for p(t) = c + v t + a t²/2: normal equations, solved by Cramer's rule.
+    let basis = |t: f64| [1.0, t, t * t / 2.0];
+    let mut m = [[0.0f64; 3]; 3];
+    let (mut rx, mut ry) = ([0.0f64; 3], [0.0f64; 3]);
+    for (&t, (_, p)) in ts.iter().zip(history) {
+        let b = basis(t);
+        for i in 0..3 {
+            for j in 0..3 {
+                m[i][j] += b[i] * b[j];
+            }
+            rx[i] += b[i] * p.x as f64;
+            ry[i] += b[i] * p.y as f64 * aspect as f64;
+        }
+    }
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&m);
+    if d.abs() < 1e-18 {
+        return None;
+    }
+    let solve = |r: [f64; 3], k: usize| {
+        let mut mk = m;
+        for i in 0..3 {
+            mk[i][k] = r[i];
+        }
+        det(&mk) / d
+    };
+    // Current velocity and acceleration along the direction of travel.
+    let norm = (dir.0 as f64).hypot(dir.1 as f64 * aspect as f64);
+    let along = |x: f64, y: f64| (x * dir.0 as f64 + y * dir.1 as f64 * aspect as f64) / norm;
+    let speed = along(solve(rx, 1), solve(ry, 1));
+    let accel = along(solve(rx, 2), solve(ry, 2));
+    if speed <= 0.0 {
+        return Some(0.0); // already stopped, or turning back
+    }
+    (accel < 0.0).then(|| (speed * speed / (-2.0 * accel)) as f32)
 }
 
 #[cfg(test)]
@@ -230,6 +288,24 @@ mod tests {
     }
 
     #[test]
+    fn a_fast_approach_braking_to_stop_short_is_not_predicted() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // 4 widths/s from 0.40, braking at 100 widths/s² so it stops at 0.48 after 40 ms.
+        let y = |t: f32| {
+            let t = t.min(0.04);
+            0.40 + 4.0 * t - 50.0 * t * t
+        };
+        let mut plucks = Vec::new();
+        for i in 0..20 {
+            let t = i * FRAME;
+            plucks.extend(pr.update(t, [p(0.5, y(t as f32 / 1e9)), None], &strings));
+        }
+        assert!(plucks.is_empty(), "{plucks:?}");
+        assert_eq!(pr.false_plucks(), 0);
+    }
+
+    #[test]
     fn a_slow_approach_plucks_only_on_the_real_crossing() {
         let strings = [across(0.5)];
         let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
@@ -248,9 +324,9 @@ mod tests {
     fn s5_a_prediction_within_60_ms_of_the_strings_last_pluck_is_jitter() {
         let strings = [across(0.5)];
         let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
-        // Left crosses down at 8 ms, then rests. Right comes up at 4 widths/s from 0.7:
-        // predicted from frame 2 to cross at 50 ms, only 42 ms after the left's Pluck.
-        let left = [0.48, 0.52, 0.52, 0.52, 0.52, 0.52];
+        // Left crosses down at 13.3 ms, then rests. Right comes up at 4 widths/s from 0.7:
+        // predicted from frame 2 to cross at 50 ms, only 37 ms after the left's Pluck.
+        let left = [0.4, 0.52, 0.52, 0.52, 0.52, 0.52];
         let mut plucks = Vec::new();
         for (i, &y) in left.iter().enumerate() {
             let t = i as u64 * FRAME;
@@ -259,9 +335,19 @@ mod tests {
         }
         assert_eq!(plucks.len(), 1, "{plucks:?}");
         assert!(
-            (plucks[0].timestamp_ns as f64 / 1e6 - 8.0).abs() < 1.0,
+            (plucks[0].timestamp_ns as f64 / 1e6 - 13.3).abs() < 1.0,
             "{plucks:?}"
         );
+        assert_eq!(pr.false_plucks(), 0);
+    }
+
+    #[test]
+    fn s9_a_plucker_appearing_on_a_string_is_not_predicted_to_pluck_it() {
+        let strings = [across(0.5)];
+        let mut pr = Prediction::new(1.0, DEFAULT_LOOKAHEAD_NS);
+        // Appears just below the String and moves up fast: it would cross at once.
+        let plucks = approach(&mut pr, &strings, 0.52, -1.5, 3).concat();
+        assert!(plucks.is_empty(), "{plucks:?}");
         assert_eq!(pr.false_plucks(), 0);
     }
 
