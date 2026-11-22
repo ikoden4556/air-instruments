@@ -20,12 +20,14 @@ pub struct Crossing {
     aspect: f32,
     previous_ns: u64,
     previous: [Option<Landmark>; 2],
+    /// Strings Plucked in the last 60 ms, with when.
+    recent: Vec<(Segment, u64)>,
 }
 
 impl Crossing {
     /// `aspect` is screen height / width, so speeds can be measured in screen widths.
     pub fn new(aspect: f32) -> Self {
-        Self { aspect, previous_ns: 0, previous: [None; 2] }
+        Self { aspect, previous_ns: 0, previous: [None; 2], recent: Vec::new() }
     }
 
     /// Feeds one frame: its timestamp, the left and right Hand's Plucker
@@ -51,11 +53,25 @@ impl Crossing {
             }
         }
         plucks.sort_by_key(|pl| pl.timestamp_ns);
+        plucks.retain(|pl| {
+            let s = strings[pl.string];
+            let jitter = self.recent.iter().any(|&(r, t)| {
+                r == s && pl.timestamp_ns.saturating_sub(t) < JITTER_NS
+            });
+            if !jitter {
+                self.recent.push((s, pl.timestamp_ns));
+            }
+            !jitter
+        });
+        self.recent.retain(|&(_, t)| t1.saturating_sub(t) < JITTER_NS);
         self.previous_ns = timestamp_ns;
         self.previous = pluckers;
         plucks
     }
 }
+
+/// Re-crossing a String this soon after it Plucked is jitter, not a Pluck.
+const JITTER_NS: u64 = 60_000_000;
 
 /// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does.
 /// A Plucker resting exactly on the String counts as on its upper side,
@@ -108,5 +124,20 @@ mod tests {
         for pl in &plucks {
             assert!((pl.velocity - 4.0).abs() < 1e-4, "{pl:?}");
         }
+    }
+
+    #[test]
+    fn s5_down_then_up_plucks_twice_but_recrossing_within_60_ms_is_jitter() {
+        let strings = [across(0.5)];
+        let mut c = Crossing::new(1.0);
+        c.update(0, [p(0.5, 0.4), None], &strings);
+        // Down: crosses at 8 ms.
+        assert_eq!(micros(&c.update(16 * MS, [p(0.5, 0.6), None], &strings)), [8_000]);
+        // Jitters back up across it at 24 ms: ignored.
+        assert!(c.update(33 * MS, [p(0.5, 0.4), None], &strings).is_empty());
+        c.update(50 * MS, [p(0.5, 0.6), None], &strings); // crosses at 41 ms: ignored
+        c.update(100 * MS, [p(0.5, 0.6), None], &strings);
+        // Back up, crossing at 108 ms, 100 ms after the first Pluck: a second Pluck.
+        assert_eq!(micros(&c.update(116 * MS, [p(0.5, 0.4), None], &strings)), [108_000]);
     }
 }
