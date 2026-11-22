@@ -50,7 +50,7 @@ impl Synth {
     pub fn render(&mut self, out: &mut [f32]) {
         for sample in out.iter_mut() {
             let mix: f32 = self.voices.iter_mut().filter(|v| v.active).map(Voice::step).sum();
-            *sample = mix;
+            *sample = (mix * MIX_GAIN).tanh();
         }
     }
 }
@@ -99,6 +99,9 @@ const VOICES: usize = 16;
 
 /// The lowest frequency a Voice can play; sets each Voice's buffer size.
 const LOWEST_FREQUENCY: f32 = 40.0;
+
+/// Level of the mix going into the soft limiter (tanh), which keeps output inside ±1.0.
+const MIX_GAIN: f32 = 0.5;
 
 /// Time for a Voice to fade by 60 dB, before the loop filter's extra damping.
 const RING_SECONDS: f32 = 3.0;
@@ -172,6 +175,42 @@ mod tests {
         let hard = rms(&pluck_once(220.0, 1.0, 0.2));
         let soft = rms(&pluck_once(220.0, 0.3, 0.2));
         assert!(hard > 2.0 * soft, "hard {hard}, soft {soft}");
+    }
+
+    #[test]
+    fn a_full_pool_steals_the_oldest_voice() {
+        let mut synth = Synth::new(RATE);
+        synth.pluck(220.0, 1.0);
+        // One more Pluck than the pool holds, all silent: the loud first Voice must go.
+        for _ in 0..VOICES {
+            synth.pluck(330.0, 0.0);
+        }
+        let mut out = vec![0.0; 4_800];
+        synth.render(&mut out);
+        assert!(peak(&out) < 1e-6, "the oldest Voice still sounds: {}", peak(&out));
+    }
+
+    #[test]
+    fn a_pool_with_room_keeps_every_voice() {
+        let mut synth = Synth::new(RATE);
+        synth.pluck(220.0, 1.0);
+        for _ in 1..VOICES {
+            synth.pluck(330.0, 0.0);
+        }
+        let mut out = vec![0.0; 4_800];
+        synth.render(&mut out);
+        assert!(peak(&out) > 0.1);
+    }
+
+    #[test]
+    fn output_never_exceeds_full_scale_with_every_voice_at_full_velocity() {
+        let mut synth = Synth::new(RATE);
+        for _ in 0..VOICES {
+            synth.pluck(110.0, 1.0);
+        }
+        let mut out = vec![0.0; 48_000];
+        synth.render(&mut out);
+        assert!(peak(&out) <= 1.0, "peak {}", peak(&out));
     }
 
     #[test]
