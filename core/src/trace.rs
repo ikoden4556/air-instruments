@@ -51,6 +51,21 @@ pub struct Score {
     pub leads_ms: Vec<f64>,
     /// Per matched predicted Pluck: predicted crossing time minus the real one.
     pub errors_ms: Vec<f64>,
+    /// Every predicted Pluck.
+    pub predicted: Vec<Predicted>,
+}
+
+#[derive(Debug)]
+pub struct Predicted {
+    pub string: Segment,
+    /// The frame that fired it.
+    pub frame_ns: u64,
+    /// How far ahead of that frame it predicted the crossing.
+    pub ahead_ms: f64,
+    /// 0..1
+    pub velocity: f32,
+    /// Matched a real crossing.
+    pub real: bool,
 }
 
 /// A Pluck in a replay: its String, the crossing time it gives, the frame it came on.
@@ -59,6 +74,7 @@ struct Fired {
     crossing_ns: u64,
     frame_ns: u64,
     predicted: bool,
+    velocity: f32,
 }
 
 fn replay(trace: &Trace, lookahead_ns: u64) -> (Vec<Fired>, u32) {
@@ -72,6 +88,7 @@ fn replay(trace: &Trace, lookahead_ns: u64) -> (Vec<Fired>, u32) {
                 crossing_ns: p.timestamp_ns,
                 frame_ns: frame.timestamp_ns,
                 predicted: p.predicted,
+                velocity: p.velocity,
             });
         }
     }
@@ -79,31 +96,45 @@ fn replay(trace: &Trace, lookahead_ns: u64) -> (Vec<Fired>, u32) {
 }
 
 /// A Pluck this close to a real crossing of its String is that crossing's Pluck.
-const MATCH_NS: u64 = 250_000_000;
+const MATCH_NS: u64 = 100_000_000;
 
 pub fn score(trace: &Trace, lookahead_ns: u64) -> Score {
     let (real, _) = replay(trace, 0);
-    let (mut fired, false_plucks) = replay(trace, lookahead_ns);
+    let (fired, false_plucks) = replay(trace, lookahead_ns);
     let mut s = Score {
         crossings: real.len(),
         false_plucks,
         ..Score::default()
     };
+    let ms = |a: u64, b: u64| (a as f64 - b as f64) / 1e6;
+    let mut matched = vec![false; fired.len()];
     for r in &real {
-        let matched = fired
-            .iter()
-            .position(|f| f.string == r.string && f.crossing_ns.abs_diff(r.crossing_ns) < MATCH_NS);
-        let Some(i) = matched else {
+        let found = fired.iter().enumerate().position(|(i, f)| {
+            !matched[i] && f.string == r.string && f.crossing_ns.abs_diff(r.crossing_ns) < MATCH_NS
+        });
+        let Some(i) = found else {
             s.missed += 1;
             continue;
         };
-        let f = fired.remove(i);
-        let ms = |a: u64, b: u64| (a as f64 - b as f64) / 1e6;
+        matched[i] = true;
+        let f = &fired[i];
         s.leads_ms.push(ms(r.crossing_ns, f.frame_ns));
         if f.predicted {
             s.errors_ms.push(ms(f.crossing_ns, r.crossing_ns));
         }
     }
+    s.predicted = fired
+        .iter()
+        .zip(matched)
+        .filter(|(f, _)| f.predicted)
+        .map(|(f, real)| Predicted {
+            string: f.string,
+            frame_ns: f.frame_ns,
+            ahead_ms: ms(f.crossing_ns, f.frame_ns),
+            velocity: f.velocity,
+            real,
+        })
+        .collect();
     s
 }
 
