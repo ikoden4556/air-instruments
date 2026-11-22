@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
 
             // "manual": auto-exposure off, 8 ms exposure, 16.7 ms frame duration -> forces 60 fps regardless of light
             fun tune(e: Camera2Interop.Extender<*>) {
-                if (fpsMode == "manual") {
+                if ("manual" in fpsMode) {
                     e.setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
                     e.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, 8_000_000L)
                     e.setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, 16_666_667L)
@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val previewBuilder = Preview.Builder()
-            if (fpsMode == "target") previewBuilder.setTargetFrameRate(range)
+            if ("target" in fpsMode) previewBuilder.setTargetFrameRate(if ("60" in fpsMode) Range(60, 60) else range)
             tune(Camera2Interop.Extender(previewBuilder))
             val preview = previewBuilder.build().also { it.surfaceProvider = previewView.surfaceProvider }
 
