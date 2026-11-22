@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
         })
 
         audioInfo = Native.audioStart()
-        // Tuning (#48): `--es model hand_landmarker_lite.task` picks another hand model in assets/,
+        // Tuning (#48): `--es model <bundle in assets/>` picks another hand model,
         // and `--ei num_hands`, `--ef min_tracking` / `min_presence` / `min_detection` override MediaPipe's.
         val model = intent.getStringExtra("model") ?: "hand_landmarker.task"
         fun float(name: String) = intent.getFloatExtra(name, -1f).takeIf { it >= 0f }
