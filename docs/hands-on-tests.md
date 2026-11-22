@@ -45,3 +45,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [ ] Strings, Stretch, Anchors and Pluckers in the debug drawing sit on your real fingers (mirroring, cover crop).
 - [ ] Frames per second: hand tracking keeps up (spike: ~16–20 processed frames/s on Chrome).
 - [ ] The swapped MediaPipe labels really give your own left and right (`frame.ts`).
+
+## Web audio (#24)
+- [ ] A Pluck sounds on the Oppo (Chrome) and the iPhone (Safari) right after "Tap to start".
+- [ ] Safari accepts the compiled wasm module posted to the AudioWorklet (if not: send the bytes and compile in the worklet).
+- [ ] Felt latency of the postMessage path; switch to a SharedArrayBuffer ring buffer only if it's too slow (ADR 0004 web target: under 150 ms felt).

@@ -1,5 +1,6 @@
 // The web shell: camera → MediaPipe → the Rust Engine, once per camera frame.
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import { createAudioContext, startSynth } from './audio';
 import { Engine, type PluckEvent } from './core';
 import { drawDebug } from './draw2d';
 import { toScreenHands } from './frame';
@@ -16,21 +17,22 @@ export const pluckListeners: ((plucks: PluckEvent[]) => void)[] = [];
 
 start.onclick = () => {
   start.remove();
-  run().catch((e: unknown) => {
+  const audio = createAudioContext();
+  if (import.meta.env.DEV) Object.assign(window, { airAudio: audio });
+  run(audio).catch((e: unknown) => {
     status.textContent = `Could not start: ${e instanceof Error ? e.message : String(e)}`;
     console.error(e);
   });
 };
 
-async function run(): Promise<void> {
-  status.textContent = 'Starting camera and hand tracking…';
-  const [core, stream] = await Promise.all([
-    WebAssembly.compileStreaming(fetch(`${BASE}air.wasm`)),
-    navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } },
-    }),
-  ]);
+async function run(audio: AudioContext): Promise<void> {
+  status.textContent = 'Starting sound, camera and hand tracking…';
+  const core = await WebAssembly.compileStreaming(fetch(`${BASE}air.wasm`));
+  pluckListeners.push(await startSynth(audio, core));
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } },
+  });
   video.srcObject = stream;
   await video.play();
   const files = await FilesetResolver.forVisionTasks(`${BASE}mediapipe`);
