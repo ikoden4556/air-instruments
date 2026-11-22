@@ -36,8 +36,8 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 
 ## Engine (#8)
 - [ ] Jitter filter settings (min cutoff 1 Hz, beta 10) feel steady but not laggy on real Hands. Oppo 2026-11-22: steady, but laggy on fast swipes (see Filter #1).
-- [ ] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable.
-- [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident.
+- [x] Velocity: a 5 screen widths/s swipe is full strength; soft and hard Plucks both feel reachable. (Oppo 2026-11-22)
+- [ ] Right after letting go of a Stretch, that Hand's index fingertip sits on the String's end: check it doesn't Pluck by accident. Oppo 2026-11-22: **FAILS sometimes — a new String sometimes Plucks by accident right after letting go.**
 - [x] MediaPipe's left/right labels match the Player's Hands (mirrored preview). (Oppo 2026-11-22, Android)
 
 ## Web shell (#23)
