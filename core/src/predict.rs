@@ -1,7 +1,7 @@
 //! Pluck prediction: fire a Pluck when the Plucker's path will cross a String
 //! within the lookahead, instead of waiting to see the crossing (ADR 0004).
 
-use crate::crossing::{crossing_point, Crossing, Pluck};
+use crate::crossing::{Crossing, Pluck, crossing_point};
 use crate::frame::Landmark;
 use crate::strings::Segment;
 
@@ -66,7 +66,8 @@ impl Prediction {
             predicted.map(|i| self.pending.remove(i)).is_none()
         });
         let before = self.pending.len();
-        self.pending.retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
+        self.pending
+            .retain(|&(_, fired)| timestamp_ns - fired < FALSE_AFTER_NS);
         self.false_plucks += (before - self.pending.len()) as u32;
         for (history, plucker) in self.history.iter_mut().zip(pluckers) {
             let Some(at) = plucker else {
@@ -77,9 +78,14 @@ impl Prediction {
                 history.remove(0);
             }
             history.push((timestamp_ns, at));
-            let Some((vx, vy)) = fitted_velocity(history) else { continue };
+            let Some((vx, vy)) = fitted_velocity(history) else {
+                continue;
+            };
             let ahead = self.lookahead_ns as f32 / 1e9;
-            let to = Landmark { x: at.x + vx * ahead, y: at.y + vy * ahead };
+            let to = Landmark {
+                x: at.x + vx * ahead,
+                y: at.y + vy * ahead,
+            };
             let velocity = vx.hypot(vy * self.aspect);
             if velocity < MIN_SPEED {
                 continue;
@@ -88,10 +94,17 @@ impl Prediction {
                 if self.pending.iter().any(|(p, _)| p == s) {
                     continue;
                 }
-                let Some(u) = crossing_point(at, to, s) else { continue };
+                let Some(u) = crossing_point(at, to, s) else {
+                    continue;
+                };
                 self.pending.push((*s, timestamp_ns));
-                let crosses_ns = timestamp_ns + (self.lookahead_ns as f64 * u as f64).round() as u64;
-                plucks.push(Pluck { string, timestamp_ns: crosses_ns, velocity });
+                let crosses_ns =
+                    timestamp_ns + (self.lookahead_ns as f64 * u as f64).round() as u64;
+                plucks.push(Pluck {
+                    string,
+                    timestamp_ns: crosses_ns,
+                    velocity,
+                });
             }
         }
         plucks
@@ -133,7 +146,10 @@ mod tests {
     }
 
     fn across(y: f32) -> Segment {
-        Segment { left: Landmark { x: 0.2, y }, right: Landmark { x: 0.8, y } }
+        Segment {
+            left: Landmark { x: 0.2, y },
+            right: Landmark { x: 0.8, y },
+        }
     }
 
     /// Feeds one Plucker moving straight down from `y0` at `speed` screen widths
@@ -162,7 +178,10 @@ mod tests {
         let plucks: Vec<_> = frames.concat();
         assert_eq!(plucks.len(), 1, "{frames:?}");
         assert_eq!(plucks[0].string, 0);
-        assert!((plucks[0].timestamp_ns as f64 / 1e6 - 75.0).abs() < 1.0, "{plucks:?}");
+        assert!(
+            (plucks[0].timestamp_ns as f64 / 1e6 - 75.0).abs() < 1.0,
+            "{plucks:?}"
+        );
         assert!((plucks[0].velocity - 4.0).abs() < 1e-3, "{plucks:?}");
     }
 
@@ -202,7 +221,10 @@ mod tests {
         for (i, f) in frames.iter().enumerate() {
             assert_eq!(f.len(), usize::from(i == 7), "frame {i}: {frames:?}");
         }
-        assert!((frames[7][0].timestamp_ns as f64 / 1e6 - 100.0).abs() < 1.0, "{frames:?}");
+        assert!(
+            (frames[7][0].timestamp_ns as f64 / 1e6 - 100.0).abs() < 1.0,
+            "{frames:?}"
+        );
     }
 
     #[test]
@@ -222,12 +244,19 @@ mod tests {
     fn velocity_is_fitted_over_several_frames_not_the_last_two() {
         // 4 screen widths/s down, with 0.01 of jitter on the newest frame.
         let ys = [0.0, 0.064, 0.128, 0.202];
-        let history: Vec<_> =
-            ys.iter().enumerate().map(|(i, &y)| (i as u64 * FRAME, Landmark { x: 0.5, y })).collect();
+        let history: Vec<_> = ys
+            .iter()
+            .enumerate()
+            .map(|(i, &y)| (i as u64 * FRAME, Landmark { x: 0.5, y }))
+            .collect();
         let (vx, vy) = fitted_velocity(&history).unwrap();
         // The last two frames alone would say 4.625; the fit, worked by hand, says 4.1875.
         assert!(vx.abs() < 1e-4);
         assert!((vy - 4.1875).abs() < 1e-3, "{vy}");
-        assert_eq!(fitted_velocity(&history[..2]), None, "two frames are not enough");
+        assert_eq!(
+            fitted_velocity(&history[..2]),
+            None,
+            "two frames are not enough"
+        );
     }
 }
