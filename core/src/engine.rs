@@ -64,7 +64,10 @@ impl Engine {
             // Pinch on and off from the raw landmarks: the filter lags slow finger
             // movements, and the Pinch thresholds already ride out jitter. The Anchor
             // is placed from the filtered ones, so it holds steady.
-            states[i] = match self.pinch[i].update(&raw_hand).map(|_| pinch::anchor(&hand)) {
+            states[i] = match self.pinch[i]
+                .update(&raw_hand)
+                .map(|_| pinch::anchor(&hand))
+            {
                 Some(anchor) => {
                     self.anchors[i] = Some(anchor);
                     HandState::Pinching(anchor)
@@ -243,7 +246,10 @@ mod tests {
             vec![l, right(0.8, 0.5, true)]
         };
         s.play(7, opening);
-        assert!(s.engine.strings().is_empty(), "froze before the fingers parted");
+        assert!(
+            s.engine.strings().is_empty(),
+            "froze before the fingers parted"
+        );
         s.play(1, |_| opening(7));
         assert_eq!(s.engine.strings().len(), 1);
     }
@@ -340,10 +346,10 @@ mod tests {
     fn a_fast_swipe_plucks_by_prediction_and_harder_than_a_slow_one() {
         let mut fast = Script::new();
         fast.build_string(0.5);
-        fast.swipe_down(0.5, 5); // 4.8 screen widths per second
+        fast.swipe_down(0.5, 8); // 3 screen widths per second
         let mut slow = Script::new();
         slow.build_string(0.5);
-        slow.swipe_down(0.5, 60); // 0.4 screen widths per second
+        slow.swipe_down(0.5, 120); // 0.2 screen widths per second
         assert_eq!((fast.plucks.len(), slow.plucks.len()), (1, 1));
         let (fast, slow) = (fast.plucks[0], slow.plucks[0]);
         assert!(fast.predicted && !slow.predicted, "{fast:?} {slow:?}");
@@ -367,8 +373,8 @@ mod tests {
     fn a_fast_swipe_that_stops_short_of_a_string_counts_as_a_false_pluck() {
         let mut s = Script::new();
         s.build_string(0.5);
-        // 4.8 widths/s straight at the String, then stops dead at 0.46 for 300 ms.
-        s.play(4, |i| vec![right(0.5, 0.3 + 0.04 * i as f32, false)]);
+        // 1.8 widths/s straight at the String, then stops dead at 0.46 for 300 ms.
+        s.play(8, |i| vec![right(0.5, 0.22 + 0.03 * i as f32, false)]);
         s.play(18, |_| vec![right(0.5, 0.46, false)]);
         assert_eq!(s.plucks.len(), 1, "predicted: {:?}", s.plucks);
         assert!(s.plucks[0].predicted);

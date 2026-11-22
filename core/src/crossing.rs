@@ -233,7 +233,10 @@ mod tests {
         // Wiggles across it, slower than the 60 ms jitter guard but never far from it.
         for (i, y) in [0.49, 0.52, 0.48, 0.51, 0.49].into_iter().enumerate() {
             let t = (200 + 100 * i as u64) * MS;
-            assert!(c.update(t, [p(0.5, y), None], &strings).is_empty(), "wiggle {i}");
+            assert!(
+                c.update(t, [p(0.5, y), None], &strings).is_empty(),
+                "wiggle {i}"
+            );
         }
         // Moves well away, then swipes back across: a new Pluck.
         c.update(800 * MS, [p(0.5, 0.4), None], &strings);
@@ -247,7 +250,10 @@ mod tests {
         // The Hand that just let go of the Stretch: its fingertip on the String's end.
         c.update(0, [None, None], &strings);
         c.update(16 * MS, [None, p(0.79, 0.51)], &strings);
-        assert!(c.update(32 * MS, [None, p(0.79, 0.48)], &strings).is_empty());
+        assert!(
+            c.update(32 * MS, [None, p(0.79, 0.48)], &strings)
+                .is_empty()
+        );
         // Away from the String, it Plucks as usual.
         c.update(100 * MS, [None, p(0.6, 0.4)], &strings);
         assert_eq!(c.update(200 * MS, [None, p(0.6, 0.6)], &strings).len(), 1);

@@ -18,7 +18,10 @@ pub struct Trace {
 
 /// Reads a recorded trace; the error names the first bad line.
 pub fn parse(text: &str) -> Result<Trace, String> {
-    let mut lines = text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty());
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty());
     let aspect = lines
         .next()
         .and_then(|(_, l)| l.strip_prefix("aspect "))
@@ -204,7 +207,7 @@ mod tests {
         let right = |y: f32| vec![hand(Handedness::Right, 0.5, y, false)];
         fingers.extend((0..=5).map(|i| right(0.3 + 0.08 * i as f32)));
         fingers.extend((0..10).map(|_| right(0.7)));
-        fingers.extend((0..=60).map(|i| right(0.7 - 0.4 * i as f32 / 60.0)));
+        fingers.extend((0..=120).map(|i| right(0.7 - 0.4 * i as f32 / 120.0)));
         fingers.extend((0..10).map(|_| right(0.3)));
         fingers.extend((0..4).map(|i| right(0.3 + 0.04 * i as f32)));
         fingers.extend((0..20).map(|_| right(0.46)));

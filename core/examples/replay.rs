@@ -22,13 +22,18 @@ fn dump_false(trace: &air_core::trace::Trace, predicted: &[air_core::trace::Pred
         })
         .collect();
     for p in predicted.iter().filter(|p| !p.real) {
-        let Some(at) = trace.frames.iter().position(|f| f.timestamp_ns == p.frame_ns) else {
+        let Some(at) = trace
+            .frames
+            .iter()
+            .position(|f| f.timestamp_ns == p.frame_ns)
+        else {
             continue;
         };
         let (a, b) = (p.string.left, p.string.right);
         let len = (b.x - a.x).hypot((b.y - a.y) * trace.aspect);
         let side = |q: air_core::frame::Landmark| {
-            ((b.x - a.x) * (q.y - a.y) * trace.aspect - (b.y - a.y) * trace.aspect * (q.x - a.x)) / len
+            ((b.x - a.x) * (q.y - a.y) * trace.aspect - (b.y - a.y) * trace.aspect * (q.x - a.x))
+                / len
         };
         let hand = (0..2)
             .min_by(|&i, &j| {
@@ -55,7 +60,9 @@ fn dump_false(trace: &air_core::trace::Trace, predicted: &[air_core::trace::Pred
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let path = args.next().expect("usage: replay <trace.txt> [lookahead ms ...]");
+    let path = args
+        .next()
+        .expect("usage: replay <trace.txt> [lookahead ms ...]");
     let mut lookaheads: Vec<u64> = args.map(|a| a.parse().expect("lookahead in ms")).collect();
     if lookaheads.is_empty() {
         lookaheads = vec![0, 40, 60, 80, 100, 120];
@@ -66,7 +73,9 @@ fn main() {
         (f.timestamp_ns - trace.frames[0].timestamp_ns) as f64 / 1e9
     });
     println!("{path}: {} frames, {secs:.0} s", trace.frames.len());
-    println!("lookahead  crossings  missed  FALSE  predicted  lead avg/min/max ms  felt est ms  error avg ms");
+    println!(
+        "lookahead  crossings  missed  FALSE  predicted  lead avg/min/max ms  felt est ms  error avg ms"
+    );
     for ms in lookaheads {
         let s = score(&trace, ms * 1_000_000);
         let n = s.leads_ms.len().max(1) as f64;
@@ -76,8 +85,18 @@ fn main() {
         let err = s.errors_ms.iter().sum::<f64>() / s.errors_ms.len().max(1) as f64;
         let mut sorted = s.leads_ms.clone();
         sorted.sort_by(f64::total_cmp);
-        let q = |f: f64| sorted.get((f * sorted.len() as f64) as usize).copied().unwrap_or(0.0);
-        eprintln!("         lead quartiles {:.0} / {:.0} / {:.0} ms", q(0.25), q(0.5), q(0.75));
+        let q = |f: f64| {
+            sorted
+                .get((f * sorted.len() as f64) as usize)
+                .copied()
+                .unwrap_or(0.0)
+        };
+        eprintln!(
+            "         lead quartiles {:.0} / {:.0} / {:.0} ms",
+            q(0.25),
+            q(0.5),
+            q(0.75)
+        );
         println!(
             "{ms:>6} ms  {:>9}  {:>6}  {:>5}  {:>9}  {lead:>6.0} {min:>5.0} {max:>5.0}     {:>8.0}     {err:>8.1}",
             s.crossings,
@@ -98,9 +117,13 @@ fn main() {
                             (ahead as f64..ahead as f64 + 20.0).contains(&p.ahead_ms)
                                 && (w[0]..w[1]).contains(&(p.velocity * 5.0))
                         });
-                        let (good, bad) = cell.fold((0, 0), |(g, b), p| {
-                            if p.real { (g + 1, b) } else { (g, b + 1) }
-                        });
+                        let (good, bad) =
+                            cell.fold(
+                                (0, 0),
+                                |(g, b), p| {
+                                    if p.real { (g + 1, b) } else { (g, b + 1) }
+                                },
+                            );
                         format!("{good:>3}/{bad:<3}")
                     })
                     .collect();
