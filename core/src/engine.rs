@@ -156,7 +156,10 @@ mod tests {
         landmarks[8] = Landmark { x, y }; // index tip
         let thumb_dx = if pinching { 0.0 } else { 0.08 };
         landmarks[4] = Landmark { x: x + thumb_dx, y }; // thumb tip
-        Hand { handedness, landmarks }
+        Hand {
+            handedness,
+            landmarks,
+        }
     }
 
     fn left(x: f32, y: f32, pinching: bool) -> Hand {
@@ -224,5 +227,123 @@ mod tests {
         // 0.6 wide is 4 Key steps up (A3); the middle is Fret 2: two more steps, D4.
         assert!(close(s.plucks[0].frequency, 293.66), "{:?}", s.plucks);
         assert_eq!(s.plucks[0].string, 0);
+    }
+
+    #[test]
+    fn plucking_further_along_the_string_plays_a_higher_fret() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        // 0.75 is 0.917 along the String: Fret 4, four steps above A3: G4.
+        s.swipe_down(0.75, 10);
+        assert_eq!(s.plucks.len(), 1, "{:?}", s.plucks);
+        assert!(close(s.plucks[0].frequency, 392.00), "{:?}", s.plucks);
+    }
+
+    #[test]
+    fn s1_a_pinching_hand_neither_stretches_nor_plucks() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        // The left Hand Pinches and sweeps across the String; the right is open, still.
+        s.play(11, |i| {
+            vec![
+                left(0.5, 0.3 + 0.04 * i as f32, true),
+                right(0.9, 0.9, false),
+            ]
+        });
+        assert_eq!(s.engine.stretch(), None);
+        assert!(s.plucks.is_empty(), "{:?}", s.plucks);
+    }
+
+    #[test]
+    fn s2_the_first_hand_to_let_go_freezes_the_stretch() {
+        let mut s = Script::new();
+        s.play(10, |_| vec![left(0.2, 0.5, true), right(0.8, 0.5, true)]);
+        s.play(3, |_| vec![left(0.2, 0.5, false), right(0.8, 0.5, true)]);
+        assert_eq!(s.engine.strings().len(), 1);
+        assert_eq!(s.engine.stretch(), None);
+    }
+
+    #[test]
+    fn s3_a_stretch_under_8_percent_of_screen_width_is_discarded() {
+        let mut s = Script::new();
+        s.play(10, |_| vec![left(0.47, 0.5, true), right(0.52, 0.5, true)]);
+        s.play(10, |_| {
+            vec![left(0.47, 0.5, false), right(0.52, 0.5, false)]
+        });
+        assert!(s.engine.strings().is_empty());
+    }
+
+    #[test]
+    fn s4_a_stretch_survives_a_short_tracking_gap() {
+        let mut s = Script::new();
+        s.play(10, |_| vec![left(0.2, 0.5, true), right(0.8, 0.5, true)]);
+        // The right Hand is out of tracking for 6 frames (100 ms).
+        s.play(6, |_| vec![left(0.2, 0.5, true)]);
+        assert!(s.engine.stretch().is_some());
+        s.play(10, |_| vec![left(0.2, 0.5, true), right(0.8, 0.5, true)]);
+        s.play(10, |_| vec![left(0.2, 0.5, false), right(0.8, 0.5, false)]);
+        assert_eq!(s.engine.strings().len(), 1);
+    }
+
+    #[test]
+    fn s5_down_then_back_up_plucks_twice() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        s.swipe_down(0.5, 10);
+        s.play(11, |i| vec![right(0.5, 0.7 - 0.04 * i as f32, false)]);
+        assert_eq!(s.plucks.len(), 2, "{:?}", s.plucks);
+    }
+
+    #[test]
+    fn s7_a_stretch_swept_across_a_string_does_not_pluck_it() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        s.play(11, |i| {
+            let y = 0.3 + 0.04 * i as f32;
+            vec![left(0.3, y, true), right(0.7, y, true)]
+        });
+        assert!(s.plucks.is_empty(), "{:?}", s.plucks);
+    }
+
+    #[test]
+    fn a_fast_swipe_plucks_by_prediction_and_harder_than_a_slow_one() {
+        let mut fast = Script::new();
+        fast.build_string(0.5);
+        fast.swipe_down(0.5, 5); // 4.8 screen widths per second
+        let mut slow = Script::new();
+        slow.build_string(0.5);
+        slow.swipe_down(0.5, 60); // 0.4 screen widths per second
+        assert_eq!((fast.plucks.len(), slow.plucks.len()), (1, 1));
+        let (fast, slow) = (fast.plucks[0], slow.plucks[0]);
+        assert!(fast.predicted && !slow.predicted, "{fast:?} {slow:?}");
+        assert!(
+            fast.velocity > slow.velocity && fast.velocity <= 1.0,
+            "{fast:?} {slow:?}"
+        );
+    }
+
+    #[test]
+    fn render_data_shows_anchors_while_pinching_and_pluckers_while_open() {
+        let mut s = Script::new();
+        s.play(5, |_| vec![left(0.2, 0.5, true), right(0.8, 0.5, false)]);
+        let [l, r] = s.engine.anchors();
+        assert!(l.is_some() && r.is_none());
+        let [l, r] = s.engine.pluckers();
+        assert!(l.is_none() && r.is_some_and(|p| close(p.x, 0.8) && close(p.y, 0.5)));
+    }
+
+    #[test]
+    fn undo_clear_and_key_reach_the_strings_and_pitch() {
+        let mut s = Script::new();
+        s.build_string(0.5);
+        s.build_string(0.8);
+        s.engine.undo();
+        assert_eq!(s.engine.strings().len(), 1);
+        s.engine.set_key(Key { root: 2 });
+        s.swipe_down(0.5, 10);
+        // In D, 0.6 wide is B3; Fret 2 is two steps more: E4.
+        assert!(close(s.plucks[0].frequency, 329.63), "{:?}", s.plucks);
+        s.engine.clear();
+        assert!(s.engine.strings().is_empty());
     }
 }
