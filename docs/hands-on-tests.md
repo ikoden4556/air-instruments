@@ -41,7 +41,7 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 - [x] MediaPipe's left/right labels match the Player's Hands (mirrored preview). (Oppo 2026-11-22, Android)
 
 ## Web shell (#23)
-- [ ] On the Oppo: `adb reverse tcp:5173 tcp:5173`, `npm run dev` in `web/`, open https://localhost:5173, tap to start; the camera and hand tracking start (http://localhost also works over adb reverse).
+- [x] On the Oppo: `adb reverse tcp:5173 tcp:5173`, `npm run dev` in `web/`, open https://localhost:5173, tap to start; the camera and hand tracking start (http://localhost also works over adb reverse). (2026-11-22: proven on the public URL and installed app instead)
 - [ ] Strings, Stretch, Anchors and Pluckers in the debug drawing sit on your real fingers (mirroring, cover crop).
 - [ ] Frames per second: hand tracking keeps up (spike: ~16–20 processed frames/s on Chrome).
 - [ ] The swapped MediaPipe labels really give your own left and right (`frame.ts`).
@@ -79,11 +79,11 @@ Most of these need the engine (#8) and a shell wired up before they can be tried
 
 ## Android drawing (#35)
 - [x] The GL layer shows over the camera preview and lines up with your fingers. (2026-11-22)
-- [x] Strings glow with Fret ticks and spark on Pluck. (2026-11-22) Vibration not looked at closely yet.
+- [x] Strings glow with Fret ticks and spark on Pluck. (2026-11-22) Vibration and sparks look right, sparks land where the finger crossed (2026-11-22).
 - [ ] Drawing doesn't lower the hand-tracking rate (GPU shared with MediaPipe; it redraws only per camera result).
 
 ## Android controls and latency (#36, and #11's Done-when)
 - [x] Undo, Clear and Key (popup) work and are easy to hit on a stand. (2026-11-22: Undo removed only the newest String, Clear the rest; Key G raised the same String's note, button label updated)
-- [ ] Tap "ms" for the readout; check camera ~60 fps and results/s, capture→result, audio out, audio mode.
+- [x] Tap "ms" for the readout; check camera ~60 fps and results/s, capture→result, audio out, audio mode. (2026-11-22, with ShortExposure: 60–64 fps, 44–52 results/s, ~100 ms, 26–31 ms, shared lowLatency)
 - [x] The readout works (2026-11-22). First run, one ceiling light: camera 20–28 fps, capture→result 108–117 ms, FELT avg 133–153 ms (predicted ~110, real ~160), FALSE 39.
 - [ ] **#11 Done-when: FELT under 90 ms on the Oppo** (not met yet: 133–153 ms in dim light; **bright daylight 2026-11-22: camera 16 fps, capture→result avg 128 ms, FELT avg 166 / p95 213 / min 112 ms (predicted 123, real 170), FALSE 6**, audio out 26 ms; **with ShortExposure, dim room: camera 64 fps, capture→result avg 100 ms, FELT avg 128 / p95 148 / min 84 ms (predicted 103, real 134), FALSE 1**) over ~20 fast swipes, plus a few deliberate near-misses (FALSE Plucks count). Note: predicted Plucks are measured against the *predicted* crossing time; cross-check once with a 240 fps slow-motion video (BLUEPRINT §4).
