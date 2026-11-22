@@ -83,4 +83,46 @@ mod tests {
         // Input spread is up to 0.01; the filtered point should barely move.
         assert!(spread < 0.002, "spread {spread}");
     }
+
+    #[test]
+    fn a_fast_move_is_followed_with_little_lag() {
+        // A fingertip sweeping across the screen at 2 screen widths per second.
+        let speed = 2.0;
+        let mut f = OneEuroFilter::new(settings());
+        let mut lag = 0.0;
+        for i in 0..30 {
+            let t = i * 16 * MS;
+            let target = speed * (t as f32 * 1e-9);
+            lag = target - f.filter(t, target);
+        }
+        // Without speed adaptation (beta 0) the lag would be about 0.3.
+        assert!(lag < 0.03, "lag {lag}");
+    }
+
+    /// Filters a step from 0 to 1 at the given frame gaps; returns the output at 99 ms.
+    fn step_response_at_99_ms(gaps_ms: &[u64]) -> f32 {
+        let still = OneEuroSettings { beta: 0.0, ..settings() };
+        let mut f = OneEuroFilter::new(still);
+        f.filter(0, 0.0);
+        let mut t = 0;
+        let mut out = 0.0;
+        for gap in gaps_ms.iter().cycle() {
+            t += gap;
+            if t > 99 {
+                break;
+            }
+            out = f.filter(t * MS, 1.0);
+        }
+        out
+    }
+
+    #[test]
+    fn uneven_frame_gaps_smooth_by_time_not_frame_count() {
+        let even_33 = step_response_at_99_ms(&[33]); // 3 frames
+        let mixed = step_response_at_99_ms(&[16, 33]); // 16, 49, 65, 98 ms: 4 frames
+        let even_16 = step_response_at_99_ms(&[16]); // 6 frames
+        // A per-frame filter would give about 0.17 per frame: 0.43 vs 0.54 vs 0.68.
+        assert!((even_33 - even_16).abs() < 0.03, "{even_33} vs {even_16}");
+        assert!((mixed - even_16).abs() < 0.03, "{mixed} vs {even_16}");
+    }
 }
