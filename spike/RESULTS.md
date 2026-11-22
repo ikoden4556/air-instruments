@@ -72,3 +72,9 @@ Verdict:
 - Naive two-frame linear velocity is noisy; the core should smooth (e.g. One Euro filter) and use more frames.
 - Realistic on the Oppo: ~85-90 ms felt for fast strums, ~105-140 ms for slow ones. 60 ms is not reachable on this hardware.
 - Odd: the 80 ms run reported buffer=512 although 1 burst was requested; not investigated.
+| 60 ms @ 60 fps front (CameraX setTargetFrameRate) | 21 | 16 | 2 | 3 | 91 / 143 ms (min 51) | 86 / 114 / 51 ms | 133 / 143 ms |
+
+60 fps verdict:
+- The front camera reaches 60 fps only with CameraX `Preview.Builder.setTargetFrameRate`, and only while the preview is bound. Camera2Interop AE ranges alone stay at 30.
+- Raw camera->result got slightly worse (~95 ms; GPU inference ~31 ms at 2x the frames), but prediction got much better: 16 of 18 real crossings predicted (vs 18 of 29 at 30 fps), and the p95 of predicted Plucks tightened from 139 to 114 ms.
+- Best felt so far on the Oppo: ~91 ms average over all Plucks, ~86 ms for predicted ones. FALSE rate is unchanged (~3 per 5 near-misses).
