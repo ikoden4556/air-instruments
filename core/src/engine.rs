@@ -3,7 +3,7 @@
 
 use crate::filter::{LandmarkFilter, OneEuroSettings};
 use crate::frame::{Frame, Handedness, Landmark};
-use crate::pinch::{Anchor, PinchDetector};
+use crate::pinch::{self, Anchor, PinchDetector};
 use crate::pitch::{self, Key};
 use crate::predict::{DEFAULT_LOOKAHEAD_NS, Prediction};
 use crate::strings::{HandState, Segment, Strings, width_fraction};
@@ -50,17 +50,21 @@ impl Engine {
     }
 
     /// Feeds one camera frame; returns its Plucks in the order they happen.
-    pub fn update(&mut self, frame: &Frame) -> Vec<PluckEvent> {
-        let frame = self.filter.filter(frame);
+    pub fn update(&mut self, raw: &Frame) -> Vec<PluckEvent> {
+        let frame = self.filter.filter(raw);
         let mut states = [HandState::Missing; 2];
         self.anchors = [None; 2];
         self.pluckers = [None; 2];
         for side in [Handedness::Left, Handedness::Right] {
             let i = side as usize;
-            let Some(hand) = frame.hands.iter().find(|h| h.handedness == side) else {
+            let find = |f: &Frame| f.hands.iter().find(|h| h.handedness == side).cloned();
+            let (Some(raw_hand), Some(hand)) = (find(raw), find(&frame)) else {
                 continue;
             };
-            states[i] = match self.pinch[i].update(hand) {
+            // Pinch on and off from the raw landmarks: the filter lags slow finger
+            // movements, and the Pinch thresholds already ride out jitter. The Anchor
+            // is placed from the filtered ones, so it holds steady.
+            states[i] = match self.pinch[i].update(&raw_hand).map(|_| pinch::anchor(&hand)) {
                 Some(anchor) => {
                     self.anchors[i] = Some(anchor);
                     HandState::Pinching(anchor)
@@ -220,6 +224,23 @@ mod tests {
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 0.01
+    }
+
+    #[test]
+    fn a_slow_release_freezes_as_soon_as_the_fingers_part_not_when_the_filter_catches_up() {
+        let mut s = Script::new();
+        s.play(10, |_| vec![left(0.2, 0.5, true), right(0.8, 0.5, true)]);
+        // The left thumb opens slowly: 0.04 of hand size per frame. It passes the
+        // 0.32 release point in frame 8 of opening.
+        let opening = |i: usize| {
+            let mut l = left(0.2, 0.5, true);
+            l.landmarks[4].x += 0.004 * (i + 1) as f32;
+            vec![l, right(0.8, 0.5, true)]
+        };
+        s.play(7, opening);
+        assert!(s.engine.strings().is_empty(), "froze before the fingers parted");
+        s.play(1, |_| opening(7));
+        assert_eq!(s.engine.strings().len(), 1);
     }
 
     #[test]

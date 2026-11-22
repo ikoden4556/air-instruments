@@ -33,15 +33,19 @@ start.onclick = () => {
 };
 
 async function run(audio: AudioContext): Promise<void> {
-  status.textContent = 'Starting sound, camera and hand tracking…';
+  // Each step named on screen, so a slow first load or a hang shows where it is.
+  status.className = 'starting';
+  status.textContent = 'Starting sound…';
   const core = await WebAssembly.compileStreaming(fetch(`${BASE}air.wasm`));
   pluckListeners.push(await startSynth(audio, core));
+  status.textContent = 'Starting the camera…';
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } },
   });
   video.srcObject = stream;
   await video.play();
+  status.textContent = 'Loading hand tracking (slow the first time)…';
   const files = await FilesetResolver.forVisionTasks(`${BASE}mediapipe`);
   const landmarker = await HandLandmarker.createFromOptions(files, {
     baseOptions: { modelAssetPath: `${BASE}hand_landmarker.task`, delegate: 'GPU' },
@@ -54,6 +58,7 @@ async function run(audio: AudioContext): Promise<void> {
   const gl = GlRenderer.create(canvas);
   const ctx = gl ? null : canvas.getContext('2d');
   status.textContent = '';
+  status.className = '';
 
   const onFrame = (now: number, meta: VideoFrameCallbackMetadata) => {
     // Capture time is on the camera timeline where the browser gives it (Chrome); else callback time.

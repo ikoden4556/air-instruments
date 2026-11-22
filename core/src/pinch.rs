@@ -27,10 +27,16 @@ impl PinchDetector {
             START_BELOW
         };
         self.pinching = ratio < threshold;
-        self.pinching.then(|| Landmark {
-            x: (thumb.x + index.x) / 2.0,
-            y: (thumb.y + index.y) / 2.0,
-        })
+        self.pinching.then(|| anchor(hand))
+    }
+}
+
+/// Midway between the Hand's thumb tip and index tip.
+pub fn anchor(hand: &Hand) -> Anchor {
+    let (thumb, index) = (hand.landmarks[THUMB_TIP], hand.landmarks[INDEX_TIP]);
+    Landmark {
+        x: (thumb.x + index.x) / 2.0,
+        y: (thumb.y + index.y) / 2.0,
     }
 }
 
