@@ -1,5 +1,40 @@
 //! One Euro jitter filter for hand landmarks, driven by capture timestamps.
 
+use crate::frame::{Frame, Handedness, LANDMARKS_PER_HAND};
+
+/// x and y filters for every landmark of one Hand.
+type HandFilters = [[OneEuroFilter; 2]; LANDMARKS_PER_HAND];
+
+/// Filters every landmark coordinate of each Hand, keeping one set of filters per handedness.
+#[derive(Debug, Clone)]
+pub struct LandmarkFilter {
+    left: HandFilters,
+    right: HandFilters,
+}
+
+impl LandmarkFilter {
+    pub fn new(settings: OneEuroSettings) -> Self {
+        let hand = || std::array::from_fn(|_| std::array::from_fn(|_| OneEuroFilter::new(settings)));
+        Self { left: hand(), right: hand() }
+    }
+
+    /// Returns the frame with every landmark smoothed.
+    pub fn filter(&mut self, frame: &Frame) -> Frame {
+        let mut out = frame.clone();
+        for hand in &mut out.hands {
+            let filters = match hand.handedness {
+                Handedness::Left => &mut self.left,
+                Handedness::Right => &mut self.right,
+            };
+            for (l, [fx, fy]) in hand.landmarks.iter_mut().zip(filters.iter_mut()) {
+                l.x = fx.filter(frame.timestamp_ns, l.x);
+                l.y = fy.filter(frame.timestamp_ns, l.y);
+            }
+        }
+        out
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OneEuroSettings {
     /// Cutoff (Hz) when the point is still: lower means less jitter, more lag.
@@ -57,6 +92,7 @@ fn lerp(from: f32, to: f32, t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::frame::{Hand, Handedness, LANDMARKS_PER_HAND, Landmark};
 
     const MS: u64 = 1_000_000;
 
@@ -124,5 +160,35 @@ mod tests {
         // A per-frame filter would give about 0.17 per frame: 0.43 vs 0.54 vs 0.68.
         assert!((even_33 - even_16).abs() < 0.03, "{even_33} vs {even_16}");
         assert!((mixed - even_16).abs() < 0.03, "{mixed} vs {even_16}");
+    }
+
+    fn hand(handedness: Handedness, at: f32) -> Hand {
+        Hand { handedness, landmarks: [Landmark { x: at, y: at }; LANDMARKS_PER_HAND] }
+    }
+
+    #[test]
+    fn each_hand_keeps_its_own_filters_for_every_landmark() {
+        let mut f = LandmarkFilter::new(settings());
+        f.filter(&Frame {
+            timestamp_ns: 0,
+            hands: vec![hand(Handedness::Left, 0.2), hand(Handedness::Right, 0.8)],
+        });
+        // Next frame: both hands move by 0.01 and arrive in the other order.
+        let out = f.filter(&Frame {
+            timestamp_ns: 16 * MS,
+            hands: vec![hand(Handedness::Right, 0.81), hand(Handedness::Left, 0.21)],
+        });
+
+        assert_eq!(out.timestamp_ns, 16 * MS);
+        let handedness: Vec<_> = out.hands.iter().map(|h| h.handedness).collect();
+        assert_eq!(handedness, [Handedness::Right, Handedness::Left]);
+        for (h, from) in out.hands.iter().zip([0.8, 0.2]) {
+            for l in &h.landmarks {
+                // Smoothed: part of the way from the old position to the new one.
+                for c in [l.x, l.y] {
+                    assert!(c > from && c < from + 0.01, "{:?} at {c}", h.handedness);
+                }
+            }
+        }
     }
 }
