@@ -32,7 +32,12 @@ pub struct Strings {
 impl Strings {
     /// `aspect` is screen height / width, so lengths can be measured in screen widths.
     pub fn new(aspect: f32) -> Self {
-        Self { aspect, stretch: None, both_pinched_ns: 0, strings: Vec::new() }
+        Self {
+            aspect,
+            stretch: None,
+            both_pinched_ns: 0,
+            strings: Vec::new(),
+        }
     }
 
     /// Feeds one frame: its timestamp and what each Hand is doing.
@@ -119,7 +124,10 @@ mod tests {
         assert!(s.strings().is_empty());
         // Both Pinching does make a Stretch between the Anchors.
         s.update(66 * MS, at(0.2, 0.5), at(0.8, 0.5));
-        let expected = Segment { left: Anchor { x: 0.2, y: 0.5 }, right: Anchor { x: 0.8, y: 0.5 } };
+        let expected = Segment {
+            left: Anchor { x: 0.2, y: 0.5 },
+            right: Anchor { x: 0.8, y: 0.5 },
+        };
         assert_eq!(s.stretch(), Some(expected));
     }
 
@@ -130,7 +138,10 @@ mod tests {
         s.update(16 * MS, at(0.2, 0.4), at(0.8, 0.6));
         // Left lets go; the String is where the Anchors were in the last frame both Pinched.
         s.update(33 * MS, Open, at(0.9, 0.9));
-        let frozen = Segment { left: Anchor { x: 0.2, y: 0.4 }, right: Anchor { x: 0.8, y: 0.6 } };
+        let frozen = Segment {
+            left: Anchor { x: 0.2, y: 0.4 },
+            right: Anchor { x: 0.8, y: 0.6 },
+        };
         assert_eq!(s.strings(), &[frozen]);
         assert_eq!(s.stretch(), None);
         // The right Hand still Pinching, then letting go, adds nothing.
@@ -172,7 +183,10 @@ mod tests {
         assert!(s.stretch().is_some());
         s.update(166 * MS, at(0.3, 0.5), at(0.8, 0.5));
         s.update(183 * MS, at(0.3, 0.5), Open);
-        let frozen = Segment { left: Anchor { x: 0.3, y: 0.5 }, right: Anchor { x: 0.8, y: 0.5 } };
+        let frozen = Segment {
+            left: Anchor { x: 0.3, y: 0.5 },
+            right: Anchor { x: 0.8, y: 0.5 },
+        };
         assert_eq!(s.strings(), &[frozen]);
 
         // This time it stays out a frame longer: Discarded, and nothing Freezes after.
@@ -186,11 +200,19 @@ mod tests {
 
     /// Freezes String number `n` (0, 1, 2, ...), each at its own height.
     fn freeze_nth(s: &mut Strings, n: u64) {
-        stretch_then_release(s, n * 50 * MS, (0.2, n as f32 / 20.0), (0.8, n as f32 / 20.0));
+        stretch_then_release(
+            s,
+            n * 50 * MS,
+            (0.2, n as f32 / 20.0),
+            (0.8, n as f32 / 20.0),
+        );
     }
 
     fn heights(s: &Strings) -> Vec<u64> {
-        s.strings().iter().map(|seg| (seg.left.y * 20.0).round() as u64).collect()
+        s.strings()
+            .iter()
+            .map(|seg| (seg.left.y * 20.0).round() as u64)
+            .collect()
     }
 
     #[test]
