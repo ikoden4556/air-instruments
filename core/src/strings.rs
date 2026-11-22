@@ -39,7 +39,12 @@ impl Strings {
             (HandState::Pinching(left), HandState::Pinching(right)) => {
                 self.stretch = Some(Segment { left, right });
             }
-            _ => self.strings.extend(self.stretch.take()),
+            _ => {
+                let aspect = self.aspect;
+                let long_enough = |s: &Segment| width_fraction(s, aspect) >= MIN_LENGTH;
+                let frozen = self.stretch.take().filter(long_enough);
+                self.strings.extend(frozen);
+            }
         }
     }
 
@@ -51,6 +56,15 @@ impl Strings {
     pub fn strings(&self) -> &[Segment] {
         &self.strings
     }
+}
+
+/// A Stretch shorter than this fraction of screen width is Discarded, not Frozen.
+const MIN_LENGTH: f32 = 0.08;
+
+/// The Segment's on-screen length as a fraction of screen width;
+/// `aspect` is screen height / width.
+fn width_fraction(s: &Segment, aspect: f32) -> f32 {
+    (s.right.x - s.left.x).hypot((s.right.y - s.left.y) * aspect)
 }
 
 #[cfg(test)]
@@ -95,5 +109,28 @@ mod tests {
         s.update(50 * MS, Open, at(0.9, 0.8));
         s.update(66 * MS, Open, Open);
         assert_eq!(s.strings(), &[frozen]);
+    }
+
+    /// Holds a Stretch from `left` to `right`, then lets go with the left Hand.
+    fn stretch_then_release(s: &mut Strings, t: u64, left: (f32, f32), right: (f32, f32)) {
+        s.update(t, at(left.0, left.1), at(right.0, right.1));
+        s.update(t + 16 * MS, Open, at(right.0, right.1));
+    }
+
+    #[test]
+    fn s3_a_stretch_under_8_percent_of_screen_width_is_discarded() {
+        // A phone held upright: the screen is twice as tall as it is wide.
+        let mut s = Strings::new(2.0);
+        // Across: 0.07 and 0.09 of the width.
+        stretch_then_release(&mut s, 0, (0.50, 0.5), (0.57, 0.5));
+        assert!(s.strings().is_empty());
+        stretch_then_release(&mut s, 50 * MS, (0.50, 0.5), (0.59, 0.5));
+        assert_eq!(s.strings().len(), 1);
+        // Up and down: 0.045 of the height is 0.09 of the width, so it is kept;
+        // 0.035 of the height is 0.07 of the width, so it is Discarded.
+        stretch_then_release(&mut s, 100 * MS, (0.5, 0.500), (0.5, 0.545));
+        assert_eq!(s.strings().len(), 2);
+        stretch_then_release(&mut s, 150 * MS, (0.5, 0.500), (0.5, 0.535));
+        assert_eq!(s.strings().len(), 2);
     }
 }
