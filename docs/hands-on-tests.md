@@ -5,11 +5,11 @@ Checks only the Player can do (playing on the phone, listening), saved for the t
 Most of these need the engine (#8) and a shell wired up before they can be tried.
 
 ## Filter (#1)
-- [ ] Fingertips look steady when a Hand is still, and keep up with a fast swipe (no visible lag).
+- [ ] Fingertips look steady when a Hand is still, and keep up with a fast swipe (no visible lag). Oppo 2026-11-22 (Android, 60 fps): **steady, but lags behind a fast swipe** (overall ~100 ms capture→result, plus the filter).
 
 ## Pinch (#2)
-- [ ] Pinching starts and stops when you expect, for a near Hand and a far Hand.
-- [ ] A half-open Pinch doesn't flicker on and off.
+- [ ] Pinching starts and stops when you expect, for a near Hand and a far Hand. Oppo 2026-11-22: starts quickly; **on letting go, sometimes a delay before the String is built (Freezes).**
+- [x] A half-open Pinch doesn't flicker on and off. (2026-11-22: holds steady)
 
 ## Strings (#3)
 - [ ] Left and right Hands are mapped the right way round (the shell's job, untested in core).
