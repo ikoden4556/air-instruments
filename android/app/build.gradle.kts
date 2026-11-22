@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins { id("com.android.application") }
 
 android {
@@ -45,4 +47,37 @@ val handModel = tasks.register("fetchHandModel") {
     }
 }
 
-tasks.named("preBuild") { dependsOn(rustLibs, handModel) }
+// The same bundle with MediaPipe's lite landmark model (#48), given the full model's metadata by
+// core/examples/lite_hand_model.rs. Picked at start with `--es model hand_landmarker_lite.task`.
+val liteDir = layout.buildDirectory.dir("liteHandModel")
+val liteLandmarks = tasks.register("liteLandmarks") {
+    dependsOn(handModel)
+    val out = liteDir.map { it.file("bundle/hand_landmarks_detector.tflite") }
+    outputs.file(out)
+    onlyIf { !out.get().asFile.exists() }
+    doLast {
+        val dir = liteDir.get().asFile.apply { mkdirs() }
+        val lite = File(dir, "hand_landmark_lite.tflite")
+        uri("https://storage.googleapis.com/mediapipe-assets/hand_landmark_lite.tflite")
+            .toURL().openStream().use { input -> lite.outputStream().use { input.copyTo(it) } }
+        val full = File(dir, "full.tflite")
+        val bundle = ZipFile(project.file("src/main/assets/hand_landmarker.task"))
+        bundle.getInputStream(bundle.getEntry("hand_landmarks_detector.tflite")).use { input -> full.outputStream().use { input.copyTo(it) } }
+        bundle.close()
+        out.get().asFile.parentFile.mkdirs()
+        providers.exec {
+            workingDir = rootProject.file("../core")
+            commandLine("cargo", "run", "-q", "--example", "lite_hand_model", "--", full.path, lite.path, out.get().asFile.path)
+        }.result.get().assertNormalExitValue()
+    }
+}
+val liteHandModel = tasks.register<Zip>("liteHandModel") {
+    dependsOn(liteLandmarks)
+    from(liteDir.map { it.file("bundle/hand_landmarks_detector.tflite") })
+    from(zipTree("src/main/assets/hand_landmarker.task")) { include("hand_detector.tflite") }
+    entryCompression = ZipEntryCompression.STORED // MediaPipe refuses compressed bundles
+    destinationDirectory = project.file("src/main/assets")
+    archiveFileName = "hand_landmarker_lite.task"
+}
+
+tasks.named("preBuild") { dependsOn(rustLibs, handModel, liteHandModel) }
