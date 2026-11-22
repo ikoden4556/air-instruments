@@ -94,12 +94,12 @@ impl Crossing {
 }
 
 /// Re-crossing a String this soon after it Plucked is jitter, not a Pluck.
-const JITTER_NS: u64 = 60_000_000;
+pub(crate) const JITTER_NS: u64 = 60_000_000;
 
 /// How far along the path `from` → `to` it crosses String `s` (0..=1), if it does.
 /// A Plucker resting exactly on the String counts as on its upper side,
 /// so the crossing is found in one frame only.
-fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Option<f32> {
+pub(crate) fn crossing_point(from: Landmark, to: Landmark, s: &Segment) -> Option<f32> {
     let (a, b) = (s.left, s.right);
     let side = |p: Landmark| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
     let (d0, d1) = (side(from), side(to));
