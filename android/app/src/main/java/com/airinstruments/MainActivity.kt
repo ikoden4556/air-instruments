@@ -2,6 +2,8 @@ package com.airinstruments
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.PixelFormat
+import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Range
@@ -37,7 +39,7 @@ import java.util.concurrent.Executors
  */
 class MainActivity : ComponentActivity() {
     private lateinit var preview: PreviewView
-    private lateinit var overlay: DebugOverlay
+    private lateinit var glView: GLSurfaceView
     private var landmarker: HandLandmarker? = null
     private val analysisThread = Executors.newSingleThreadExecutor()
 
@@ -55,6 +57,9 @@ class MainActivity : ComponentActivity() {
         private set
     @Volatile var scene = RenderData.EMPTY
         private set
+    /** Each tracked Hand's landmarks in screen space (x0, y0, x1, y1 …), for the skeleton. */
+    @Volatile var handPoints: List<FloatArray> = emptyList()
+        private set
     @Volatile var audioInfo = 0
         private set
 
@@ -69,11 +74,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        preview = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
-        overlay = DebugOverlay(this)
+        // The preview is a SurfaceView; the GL drawing is a translucent SurfaceView just above it.
+        preview = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+        }
+        val renderer = GlRenderer(this)
+        pluckListeners += { plucks, n, _ -> renderer.onPlucks(plucks, n, scene) }
+        glView = GLSurfaceView(this).apply {
+            setEGLContextClientVersion(3)
+            setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+            holder.setFormat(PixelFormat.TRANSLUCENT)
+            setZOrderMediaOverlay(true)
+            setRenderer(renderer)
+            renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+        }
         setContentView(FrameLayout(this).apply {
             addView(this@MainActivity.preview)
-            addView(this@MainActivity.overlay)
+            addView(this@MainActivity.glView)
         })
 
         audioInfo = Native.audioStart()
@@ -164,9 +182,23 @@ class MainActivity : ComponentActivity() {
         val labels = result.handedness().map { it.firstOrNull()?.categoryName() ?: "" }
         val count = HandFrame.write(points, labels, hands)
         val found = Native.engineUpdate(engine, captureNs, hands, count, plucks)
-        if (found > 0) for (listen in pluckListeners) listen(plucks, minOf(found, Native.MAX_PLUCKS), captureNs)
+        // The scene first, so Pluck listeners see the Strings the Pluck indices refer to.
         scene = RenderData.parse(render, Native.engineRender(engine, render))
-        overlay.postInvalidate()
+        handPoints = (0 until count).map { h ->
+            FloatArray(2 * HandFrame.LANDMARKS) { hands[h * HandFrame.HAND_FLOATS + 1 + it] }
+        }
+        if (found > 0) for (listen in pluckListeners) listen(plucks, minOf(found, Native.MAX_PLUCKS), captureNs)
+        glView.requestRender()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        glView.onResume()
+    }
+
+    override fun onPause() {
+        glView.onPause()
+        super.onPause()
     }
 
     override fun onDestroy() {
